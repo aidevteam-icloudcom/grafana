@@ -5,11 +5,34 @@ import { mockTransformationsRegistry } from '../../utils/tests/mockTransformatio
 
 import { calculateFieldTransformer } from './calculateField';
 import { JoinMode } from './joinByField';
-import { isLikelyAscendingVector, joinDataFrames } from './joinDataFrames';
+import { canDoCheapOuterJoin, isLikelyAscendingVector, joinDataFrames } from './joinDataFrames';
 
 describe('align frames', () => {
   beforeAll(() => {
     mockTransformationsRegistry([calculateFieldTransformer]);
+  });
+
+  describe('by first time field, pre-aligned frames', () => {
+    const series1 = toDataFrame({
+      fields: [
+        { name: 'Time', type: FieldType.time, values: [1000, 2000] },
+        { name: 'A', type: FieldType.number, values: [1, 100] },
+      ],
+    });
+
+    const series2 = toDataFrame({
+      fields: [
+        { name: 'Time', type: FieldType.time, values: [1000, 2000] },
+        { name: 'A', type: FieldType.number, values: [2, 200] },
+        { name: 'B', type: FieldType.number, values: [3, 300] },
+        { name: 'C', type: FieldType.string, values: ['first', 'second'] },
+      ],
+    });
+
+    it('can perform cheap outer join', () => {
+      const can = canDoCheapOuterJoin([series1.fields.map((f) => f.values), series2.fields.map((f) => f.values)])!;
+      expect(can).toBe(true);
+    });
   });
 
   describe('by first time field', () => {
