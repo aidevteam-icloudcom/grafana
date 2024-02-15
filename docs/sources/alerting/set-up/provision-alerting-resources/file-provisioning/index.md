@@ -52,7 +52,7 @@ Create or delete alert rules in your Grafana instance(s).
 Here is an example of a configuration file for creating alert rules.
 
 ```yaml
-# config file version
+# Configuration file version
 apiVersion: 1
 
 # List of rule groups to import or update
@@ -125,7 +125,7 @@ groups:
 Here is an example of a configuration file for deleting alert rules.
 
 ```yaml
-# config file version
+# Configuration file version
 apiVersion: 1
 
 # List of alert rule UIDs that should be deleted
@@ -151,7 +151,7 @@ Create or delete contact points in your Grafana instance(s).
 Here is an example of a configuration file for creating contact points.
 
 ```yaml
-# config file version
+# Configuration file version
 apiVersion: 1
 
 # List of contact points to import or update
@@ -175,7 +175,7 @@ contactPoints:
 Here is an example of a configuration file for deleting contact points.
 
 ```yaml
-# config file version
+# Configuration file version
 apiVersion: 1
 
 # List of receivers that should be deleted
@@ -592,7 +592,7 @@ Since the policy tree is a single resource, provisioning it will overwrite a pol
 Here is an example of a configuration file for creating notification policies.
 
 ```yaml
-# config file version
+# Configuration file version
 apiVersion: 1
 
 # List of notification policies
@@ -655,7 +655,7 @@ policies:
 Here is an example of a configuration file for resetting the policy tree back to its default value:
 
 ```yaml
-# config file version
+# Configuration file version
 apiVersion: 1
 
 # List of orgIds that should be reset to the default policy
@@ -676,7 +676,7 @@ Create or delete templates in your Grafana instance(s).
 Here is an example of a configuration file for creating templates.
 
 ```yaml
-# config file version
+# Configuration file version
 apiVersion: 1
 
 # List of templates to import or update
@@ -692,7 +692,7 @@ templates:
 Here is an example of a configuration file for deleting templates.
 
 ```yaml
-# config file version
+# Configuration file version
 apiVersion: 1
 
 # List of alert rule UIDs that should be deleted
@@ -716,7 +716,7 @@ Create or delete mute timings in your Grafana instance(s).
 Here is an example of a configuration file for creating mute timings.
 
 ```yaml
-# config file version
+# Configuration file version
 apiVersion: 1
 
 # List of mute time intervals to import or update
@@ -741,7 +741,7 @@ muteTimes:
 Here is an example of a configuration file for deleting mute timings.
 
 ```yaml
-# config file version
+# Configuration file version
 apiVersion: 1
 
 # List of mute time intervals that should be deleted
