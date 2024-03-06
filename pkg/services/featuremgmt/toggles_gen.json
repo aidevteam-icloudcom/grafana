@@ -2087,6 +2087,34 @@
         "stage": "experimental",
         "codeowner": "@grafana/grafana-app-platform-squad"
       }
+    },
+    {
+      "metadata": {
+        "name": "slackSharePreview",
+        "resourceVersion": "1709242208036",
+        "creationTimestamp": "2024-02-29T21:30:08Z"
+      },
+      "spec": {
+        "description": "Share dashboards preview to Slack",
+        "stage": "experimental",
+        "codeowner": "@grafana/sharing-squad",
+        "requiresRestart": true,
+        "hideFromDocs": true
+      }
+    },
+    {
+      "metadata": {
+        "name": "slackUnfurling",
+        "resourceVersion": "1709242339515",
+        "creationTimestamp": "2024-02-29T21:32:19Z"
+      },
+      "spec": {
+        "description": "Unfurl dashboard links in Slack and display an image preview",
+        "stage": "experimental",
+        "codeowner": "@grafana/sharing-squad",
+        "requiresRestart": true,
+        "hideFromDocs": true
+      }
     }
   ]
 }

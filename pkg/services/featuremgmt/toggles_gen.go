@@ -654,4 +654,12 @@ const (
 	// FlagScopeFilters
 	// Enables the use of scope filters in Grafana
 	FlagScopeFilters = "scopeFilters"
+
+	// FlagSlackSharePreview
+	// Share dashboards preview to Slack
+	FlagSlackSharePreview = "slackSharePreview"
+
+	// FlagSlackUnfurling
+	// Unfurl dashboard links in Slack and display an image preview
+	FlagSlackUnfurling = "slackUnfurling"
 )

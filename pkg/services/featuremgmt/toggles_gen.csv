@@ -161,3 +161,5 @@ expressionParser,experimental,@grafana/grafana-app-platform-squad,false,true,fal
 groupByVariable,experimental,@grafana/dashboards-squad,false,false,false
 alertingUpgradeDryrunOnStart,GA,@grafana/alerting-squad,false,true,false
 scopeFilters,experimental,@grafana/dashboards-squad,false,false,false
+slackSharePreview,experimental,@grafana/sharing-squad,false,true,false
+slackUnfurling,experimental,@grafana/sharing-squad,false,true,false

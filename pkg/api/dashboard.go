@@ -5,11 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/grafana/grafana/pkg/models"
+	"github.com/grafana/grafana/pkg/services/dashboardimage"
+	"github.com/grafana/grafana/pkg/services/rendering"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/grafana/grafana/pkg/api/apierrors"
 	"github.com/grafana/grafana/pkg/api/dtos"
@@ -1028,6 +1033,62 @@ func (hs *HTTPServer) GetDashboardUIDs(c *contextmodel.ReqContext) {
 		uids = append(uids, qResult.UID)
 	}
 	c.JSON(http.StatusOK, uids)
+}
+
+func (hs *HTTPServer) GeneratePreview(c *contextmodel.ReqContext) response.Response {
+	var previewRequest PreviewRequest
+	if err := web.Bind(c.Req, &previewRequest); err != nil {
+		return response.Error(http.StatusBadRequest, "error parsing body", err)
+	}
+	previewUrl, err := url.Parse(previewRequest.ResourcePath)
+	if err != nil {
+		return response.Error(http.StatusInternalServerError, "error parsing resource path", err)
+	}
+	q := previewUrl.Query()
+	panelId, _ := strconv.ParseInt(q.Get("panelId"), 10, 64)
+
+	hs.log.Info("Generating preview", "resourcePath", previewRequest.ResourcePath)
+
+	opts := dashboardimage.ScreenshotOptions{
+		AuthOptions: rendering.AuthOpts{
+			OrgID:   c.SignedInUser.GetOrgID(),
+			UserID:  c.SignedInUser.UserID,
+			OrgRole: c.SignedInUser.OrgRole,
+		},
+		OrgID:        c.SignedInUser.GetOrgID(),
+		DashboardUID: web.Params(c.Req)[":uid"],
+		PanelID:      panelId,
+		From:         q.Get("from"),
+		To:           q.Get("to"),
+		Width:        1600,
+		Height:       800,
+		Theme:        models.ThemeDark,
+		Timeout:      time.Duration(60) * time.Second,
+	}
+
+	hs.log.Info("Generating preview", "resourcePath", opts)
+
+	filePath, err := hs.dashboardImageService.TakeScreenshotAndUpload(c.Req.Context(), opts)
+	if err != nil {
+		return response.Error(http.StatusInternalServerError, "Rendering failed", err)
+	}
+
+	return response.JSON(http.StatusOK, &PreviewResponse{
+		PreviewURL: filePath,
+	})
+}
+
+func (hs *HTTPServer) getImageURL(imageName string) string {
+	grafanaURL := hs.getGrafanaURL()
+	return fmt.Sprintf("%s%s/%s", grafanaURL, "public/img/attachments", imageName)
+}
+
+type PreviewRequest struct {
+	ResourcePath string `json:"resourcePath"`
+}
+
+type PreviewResponse struct {
+	PreviewURL string `json:"previewUrl"`
 }
 
 // swagger:parameters restoreDashboardVersionByID

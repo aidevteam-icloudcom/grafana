@@ -525,6 +525,10 @@ type Cfg struct {
 	// Experimental scope settings
 	ScopesListScopesURL     string
 	ScopesListDashboardsURL string
+
+	// Slack
+	SlackToken         string
+	SlackSigningSecret string
 }
 
 // AddChangePasswordLink returns if login form is disabled or not since
@@ -1284,6 +1288,7 @@ func (cfg *Cfg) parseINIFile(iniFile *ini.File) error {
 
 	cfg.readFeatureManagementConfig()
 	cfg.readPublicDashboardsSettings()
+	cfg.readSlackSettings()
 
 	// read experimental scopes settings.
 	scopesSection := iniFile.Section("scopes")
@@ -2014,4 +2019,10 @@ func (cfg *Cfg) readLiveSettings(iniFile *ini.File) error {
 func (cfg *Cfg) readPublicDashboardsSettings() {
 	publicDashboards := cfg.Raw.Section("public_dashboards")
 	cfg.PublicDashboardsEnabled = publicDashboards.Key("enabled").MustBool(true)
+}
+
+func (cfg *Cfg) readSlackSettings() {
+	slack := cfg.Raw.Section("slack")
+	cfg.SlackToken = slack.Key("token").MustString("")
+	cfg.SlackSigningSecret = slack.Key("signing_secret").MustString("")
 }

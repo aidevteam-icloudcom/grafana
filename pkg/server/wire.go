@@ -8,8 +8,9 @@ package server
 
 import (
 	"github.com/google/wire"
-
 	sdkhttpclient "github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
+	"github.com/grafana/grafana/pkg/services/dashboardimage"
+	"github.com/grafana/grafana/pkg/services/screenshot"
 
 	"github.com/grafana/grafana/pkg/api"
 	"github.com/grafana/grafana/pkg/api/avatar"
@@ -53,6 +54,7 @@ import (
 	"github.com/grafana/grafana/pkg/services/cloudmigration/cloudmigrationimpl"
 	"github.com/grafana/grafana/pkg/services/contexthandler"
 	"github.com/grafana/grafana/pkg/services/correlations"
+	dashboardImageService "github.com/grafana/grafana/pkg/services/dashboardimage/service"
 	"github.com/grafana/grafana/pkg/services/dashboardimport"
 	dashboardimportservice "github.com/grafana/grafana/pkg/services/dashboardimport/service"
 	dashboardstore "github.com/grafana/grafana/pkg/services/dashboards/database"
@@ -128,6 +130,9 @@ import (
 	"github.com/grafana/grafana/pkg/services/shorturls/shorturlimpl"
 	"github.com/grafana/grafana/pkg/services/signingkeys"
 	"github.com/grafana/grafana/pkg/services/signingkeys/signingkeysimpl"
+	"github.com/grafana/grafana/pkg/services/slack"
+	slackApi "github.com/grafana/grafana/pkg/services/slack/api"
+	slackService "github.com/grafana/grafana/pkg/services/slack/service"
 	"github.com/grafana/grafana/pkg/services/sqlstore"
 	"github.com/grafana/grafana/pkg/services/sqlstore/sqlutil"
 	"github.com/grafana/grafana/pkg/services/ssosettings"
@@ -183,6 +188,7 @@ var wireBasicSet = wire.NewSet(
 	alerting.ProvideAlertEngine,
 	wire.Bind(new(alerting.UsageStatsQuerier), new(*alerting.AlertEngine)),
 	New,
+	screenshot.NewHeadlessScreenshotService,
 	api.ProvideHTTPServer,
 	query.ProvideService,
 	wire.Bind(new(query.Service), new(*query.ServiceImpl)),
@@ -375,6 +381,7 @@ var wireBasicSet = wire.NewSet(
 	anonstore.ProvideAnonDBStore,
 	wire.Bind(new(anonstore.AnonStore), new(*anonstore.AnonDBStore)),
 	loggermw.Provide,
+	slackApi.ProvideApi,
 	signingkeysimpl.ProvideEmbeddedSigningKeysService,
 	wire.Bind(new(signingkeys.Service), new(*signingkeysimpl.Service)),
 	ssoSettingsImpl.ProvideService,
@@ -385,6 +392,10 @@ var wireBasicSet = wire.NewSet(
 	// Kubernetes API server
 	grafanaapiserver.WireSet,
 	apiregistry.WireSet,
+	dashboardImageService.ProvideService,
+	wire.Bind(new(dashboardimage.Service), new(*dashboardImageService.DashboardImageService)),
+	slackService.ProvideService,
+	wire.Bind(new(slack.Service), new(*slackService.SlackService)),
 )
 
 var wireSet = wire.NewSet(

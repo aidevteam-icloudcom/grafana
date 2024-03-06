@@ -11,6 +11,8 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/grafana/grafana/pkg/services/dashboardimage"
+	slackApi "github.com/grafana/grafana/pkg/services/slack/api"
 	"math/big"
 	"net"
 	"net/http"
@@ -200,23 +202,25 @@ type HTTPServer struct {
 	kvStore                      kvstore.KVStore
 	pluginsCDNService            *pluginscdn.Service
 
-	userService          user.Service
-	tempUserService      tempUser.Service
-	loginAttemptService  loginAttempt.Service
-	orgService           org.Service
-	teamService          team.Service
-	accesscontrolService accesscontrol.Service
-	annotationsRepo      annotations.Repository
-	tagService           tag.Service
-	oauthTokenService    oauthtoken.OAuthTokenService
-	statsService         stats.Service
-	authnService         authn.Service
-	starApi              *starApi.API
-	promRegister         prometheus.Registerer
-	promGatherer         prometheus.Gatherer
-	clientConfigProvider grafanaapiserver.DirectRestConfigProvider
-	namespacer           request.NamespaceMapper
-	anonService          anonymous.Service
+	userService           user.Service
+	tempUserService       tempUser.Service
+	loginAttemptService   loginAttempt.Service
+	orgService            org.Service
+	teamService           team.Service
+	accesscontrolService  accesscontrol.Service
+	annotationsRepo       annotations.Repository
+	tagService            tag.Service
+	oauthTokenService     oauthtoken.OAuthTokenService
+	statsService          stats.Service
+	authnService          authn.Service
+	starApi               *starApi.API
+	promRegister          prometheus.Registerer
+	promGatherer          prometheus.Gatherer
+	clientConfigProvider  grafanaapiserver.DirectRestConfigProvider
+	namespacer            request.NamespaceMapper
+	anonService           anonymous.Service
+	slackApi              *slackApi.Api
+	dashboardImageService dashboardimage.Service
 }
 
 type ServerOptions struct {
@@ -259,6 +263,8 @@ func ProvideHTTPServer(opts ServerOptions, cfg *setting.Cfg, routeRegister routi
 	annotationRepo annotations.Repository, tagService tag.Service, searchv2HTTPService searchV2.SearchHTTPService, oauthTokenService oauthtoken.OAuthTokenService,
 	statsService stats.Service, authnService authn.Service, pluginsCDNService *pluginscdn.Service, promGatherer prometheus.Gatherer,
 	starApi *starApi.API, promRegister prometheus.Registerer, clientConfigProvider grafanaapiserver.DirectRestConfigProvider, anonService anonymous.Service,
+	slackApi *slackApi.Api,
+	dashboardImageService dashboardimage.Service,
 ) (*HTTPServer, error) {
 	web.Env = cfg.Env
 	m := web.New()
@@ -361,6 +367,8 @@ func ProvideHTTPServer(opts ServerOptions, cfg *setting.Cfg, routeRegister routi
 		clientConfigProvider:         clientConfigProvider,
 		namespacer:                   request.GetNamespaceMapper(cfg),
 		anonService:                  anonService,
+		slackApi:                     slackApi,
+		dashboardImageService:        dashboardImageService,
 	}
 	if hs.Listener != nil {
 		hs.log.Debug("Using provided listener")
@@ -801,6 +809,34 @@ func (hs *HTTPServer) mapStatic(m *web.Mux, rootDir string, dir string, prefix s
 			Exclude:     exclude,
 		},
 	))
+}
+
+// TODO: Duplicated from the rendering service - maybe we can do this in another way to not duplicate this
+func (hs *HTTPServer) getGrafanaURL() string {
+	if hs.Cfg.RendererCallbackUrl != "" {
+		return hs.Cfg.RendererCallbackUrl
+	}
+
+	protocol := hs.Cfg.Protocol
+	switch protocol {
+	case setting.HTTPScheme:
+		protocol = "http"
+	case setting.HTTP2Scheme, setting.HTTPSScheme:
+		protocol = "https"
+	default:
+		// TODO: Handle other schemes?
+	}
+
+	subPath := ""
+	if hs.Cfg.ServeFromSubPath {
+		subPath = hs.Cfg.AppSubURL
+	}
+
+	domain := "localhost"
+	if hs.Cfg.HTTPAddr != "0.0.0.0" {
+		domain = hs.Cfg.HTTPAddr
+	}
+	return fmt.Sprintf("%s://%s:%s%s/", protocol, domain, hs.Cfg.HTTPPort, subPath)
 }
 
 func (hs *HTTPServer) metricsEndpointBasicAuthEnabled() bool {

@@ -180,4 +180,6 @@ export interface FeatureToggles {
   groupByVariable?: boolean;
   alertingUpgradeDryrunOnStart?: boolean;
   scopeFilters?: boolean;
+  slackSharePreview?: boolean;
+  slackUnfurling?: boolean;
 }
