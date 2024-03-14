@@ -25,6 +25,7 @@ export interface SearchQuery {
   limit?: number;
   from?: number;
   starred?: boolean;
+  deleted?: boolean;
 }
 
 export interface DashboardQueryResult {
@@ -36,6 +37,7 @@ export interface DashboardQueryResult {
   tags: string[];
   location: string; // url that can be split
   ds_uid: string[];
+  remaining_trash_at_age?: string;
 
   // debugging fields
   score: number;

@@ -21,6 +21,7 @@ interface APIQuery {
   folderUIDs?: string[];
   sort?: string;
   starred?: boolean;
+  deleted?: boolean;
 }
 
 // Internal object to hold folderId
@@ -86,6 +87,7 @@ export class SQLSearcher implements GrafanaSearcher {
         tag: query.tags,
         sort: query.sort,
         page,
+        deleted: query.deleted,
       },
       query
     );
@@ -153,6 +155,7 @@ export class SQLSearcher implements GrafanaSearcher {
     const tags: string[][] = [];
     const location: string[] = [];
     const sortBy: number[] = [];
+    const remainingTrashAtAge: string[] = [];
     let sortMetaName: string | undefined;
 
     for (let hit of rsp) {
@@ -163,6 +166,9 @@ export class SQLSearcher implements GrafanaSearcher {
       url.push(hit.url);
       tags.push(hit.tags);
       sortBy.push(hit.sortMeta!);
+      if (hit.remainingTrashAtAge) {
+        remainingTrashAtAge.push(hit.remainingTrashAtAge);
+      }
 
       let v = hit.folderUid;
       if (!v && k === 'dashboard') {
@@ -218,6 +224,15 @@ export class SQLSearcher implements GrafanaSearcher {
         type: FieldType.number,
         config: {},
         values: sortBy,
+      });
+    }
+
+    if (remainingTrashAtAge.length) {
+      data.fields.push({
+        name: 'remaining_trash_at_age',
+        type: FieldType.string,
+        config: {},
+        values: remainingTrashAtAge,
       });
     }
 
