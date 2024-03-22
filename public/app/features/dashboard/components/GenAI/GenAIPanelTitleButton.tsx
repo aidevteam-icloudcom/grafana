@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 
 import { getDashboardSrv } from '../../services/DashboardSrv';
 import { PanelModel } from '../../state';
@@ -20,7 +20,7 @@ const TITLE_GENERATION_STANDARD_PROMPT =
   `The title should be shorter than ${PANEL_TITLE_CHAR_LIMIT} characters.`;
 
 export const GenAIPanelTitleButton = ({ onGenerate, panel }: GenAIPanelTitleButtonProps) => {
-  const messages = React.useMemo(() => getMessages(panel), [panel]);
+  const messages = useCallback(() => getMessages(panel), [panel]);
 
   return (
     <GenAIButton
@@ -47,6 +47,10 @@ function getMessages(panel: PanelModel): Message[] {
     },
     {
       content: `The panel is part of a dashboard with the description: ${dashboard.description}`,
+      role: Role.system,
+    },
+    {
+      content: `Disregard the current panel title and come up with one that makes sense given the panel's type and purpose. The panel's type is ${panel.type}`,
       role: Role.system,
     },
     {

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 
 import { getDashboardSrv } from '../../services/DashboardSrv';
 import { PanelModel } from '../../state';
@@ -24,7 +24,7 @@ const DESCRIPTION_GENERATION_STANDARD_PROMPT =
   `The description should be, at most, ${PANEL_DESCRIPTION_CHAR_LIMIT} characters.`;
 
 export const GenAIPanelDescriptionButton = ({ onGenerate, panel }: GenAIPanelDescriptionButtonProps) => {
-  const messages = React.useMemo(() => getMessages(panel), [panel]);
+  const messages = useCallback(() => getMessages(panel), [panel]);
 
   return (
     <GenAIButton
@@ -51,6 +51,10 @@ function getMessages(panel: PanelModel): Message[] {
     },
     {
       content: `The panel is part of a dashboard with the description: ${dashboard.description}`,
+      role: Role.system,
+    },
+    {
+      content: `Disregard the current panel description and come up with one that makes sense given the panel's type and purpose. The panel's type is ${panel.type}`,
       role: Role.system,
     },
     {
