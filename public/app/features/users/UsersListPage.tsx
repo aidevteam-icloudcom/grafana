@@ -4,7 +4,7 @@ import { connect, ConnectedProps } from 'react-redux';
 import { renderMarkdown } from '@grafana/data';
 import { Page } from 'app/core/components/Page/Page';
 import { contextSrv } from 'app/core/core';
-import { OrgUser, OrgRole, StoreState } from 'app/types';
+import { OrgUser, OrgRole, StoreState, Role } from 'app/types';
 
 import { OrgUsersTable } from '../admin/Users/OrgUsersTable';
 import InviteesTable from '../invites/InviteesTable';
@@ -12,7 +12,7 @@ import { fetchInvitees } from '../invites/state/actions';
 import { selectInvitesMatchingQuery } from '../invites/state/selectors';
 
 import { UsersActionBar } from './UsersActionBar';
-import { loadUsers, removeUser, updateUser, changePage, changeSort } from './state/actions';
+import { loadUsers, removeUser, updateUser, setUserRoles, changePage, changeSort } from './state/actions';
 import { getUsers, getUsersSearchQuery } from './state/selectors';
 
 function mapStateToProps(state: StoreState) {
@@ -37,6 +37,7 @@ const mapDispatchToProps = {
   changeSort,
   updateUser,
   removeUser,
+  setUserRoles,
 };
 
 const connector = connect(mapStateToProps, mapDispatchToProps);
@@ -61,6 +62,7 @@ export const UsersListPageUnconnected = ({
   updateUser,
   removeUser,
   changeSort,
+  setUserRoles,
 }: Props) => {
   const [showInvites, setShowInvites] = useState(false);
   const externalUserMngInfoHtml = externalUserMngInfo ? renderMarkdown(externalUserMngInfo) : '';
@@ -71,7 +73,14 @@ export const UsersListPageUnconnected = ({
   }, [fetchInvitees, loadUsers]);
 
   const onRoleChange = (role: OrgRole, user: OrgUser) => {
-    updateUser({ ...user, role: role });
+    updateUser({ ...user, role });
+  };
+
+  const onRolesChange = (user: OrgUser, roles: Role[]) => {
+    setUserRoles({
+      userId: user.userId,
+      roles,
+    });
   };
 
   const onRemoveUser = (user: OrgUser) => removeUser(user.userId);
@@ -90,6 +99,7 @@ export const UsersListPageUnconnected = ({
           orgId={contextSrv.user.orgId}
           rolesLoading={rolesLoading}
           onRoleChange={onRoleChange}
+          onRolesChange={onRolesChange}
           onRemoveUser={onRemoveUser}
           fetchData={changeSort}
           changePage={changePage}
