@@ -78,6 +78,7 @@ export const alertmanagerApi = alertingApi.injectEndpoints({
           params,
         };
       },
+      providesTags: ['AlertmanagerAlerts'],
     }),
 
     getAlertmanagerAlertGroups: build.query<AlertmanagerGroup[], { amSourceName: string }>({
@@ -164,8 +165,8 @@ export const alertmanagerApi = alertingApi.injectEndpoints({
 
         // wrap our fetchConfig function with some performance logging functions
         const fetchAMconfigWithLogging = withPerformanceLogging(
+          'unifiedalerting/fetchAmConfig',
           fetchAlertManagerConfig,
-          `[${alertmanagerSourceName}] Alertmanager config loaded`,
           {
             dataSourceName: alertmanagerSourceName,
             thunk: 'unifiedalerting/fetchAmConfig',

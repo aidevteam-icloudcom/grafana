@@ -43,13 +43,18 @@ func TestService(t *testing.T) {
 		},
 	}, &datafakes.FakeCacheService{}, &datafakes.FakeDataSourceService{}, nil, pluginconfig.NewFakePluginRequestConfigProvider())
 
+	features := featuremgmt.WithFeatures()
 	s := Service{
 		cfg:          setting.NewCfg(),
 		dataService:  me,
 		pCtxProvider: pCtxProvider,
-		features:     &featuremgmt.FeatureManager{},
+		features:     features,
 		tracer:       tracing.InitializeTracerForTest(),
 		metrics:      newMetrics(nil),
+		converter: &ResultConverter{
+			Features: features,
+			Tracer:   tracing.InitializeTracerForTest(),
+		},
 	}
 
 	queries := []Query{
@@ -133,7 +138,7 @@ func TestDSQueryError(t *testing.T) {
 		cfg:          setting.NewCfg(),
 		dataService:  me,
 		pCtxProvider: pCtxProvider,
-		features:     &featuremgmt.FeatureManager{},
+		features:     featuremgmt.WithFeatures(),
 		tracer:       tracing.InitializeTracerForTest(),
 		metrics:      newMetrics(nil),
 	}

@@ -270,10 +270,6 @@ func (hs *HTTPServer) CompleteInvite(c *contextmodel.ReqContext) response.Respon
 		}
 	}
 
-	if err := completeInvite.Password.Validate(hs.Cfg); err != nil {
-		return response.Err(err)
-	}
-
 	cmd := user.CreateUserCommand{
 		Email:        completeInvite.Email,
 		Name:         completeInvite.Name,
@@ -342,13 +338,16 @@ func (hs *HTTPServer) applyUserInvite(ctx context.Context, usr *user.User, invit
 
 	if setActive {
 		// set org to active
-		if err := hs.userService.SetUsingOrg(ctx, &user.SetUsingOrgCommand{OrgID: invite.OrgID, UserID: usr.ID}); err != nil {
+		if err := hs.userService.Update(ctx, &user.UpdateUserCommand{OrgID: &invite.OrgID, UserID: usr.ID}); err != nil {
 			return false, response.Error(http.StatusInternalServerError, "Failed to set org as active", err)
 		}
 	}
 
 	return true, nil
 }
+
+// swagger:response SMTPNotEnabledError
+type SMTPNotEnabledError PreconditionFailedError
 
 // swagger:parameters addOrgInvite
 type AddInviteParams struct {

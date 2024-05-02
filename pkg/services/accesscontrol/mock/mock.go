@@ -20,6 +20,7 @@ type fullAccessControl interface {
 
 type Calls struct {
 	Evaluate                       []interface{}
+	GetRoleByName                  []interface{}
 	GetUserPermissions             []interface{}
 	ClearUserPermissionCache       []interface{}
 	DeclareFixedRoles              []interface{}
@@ -46,6 +47,7 @@ type Mock struct {
 
 	// Override functions
 	EvaluateFunc                       func(context.Context, identity.Requester, accesscontrol.Evaluator) (bool, error)
+	GetRoleByNameFunc                  func(context.Context, int64, string) (*accesscontrol.RoleDTO, error)
 	GetUserPermissionsFunc             func(context.Context, identity.Requester, accesscontrol.Options) ([]accesscontrol.Permission, error)
 	ClearUserPermissionCacheFunc       func(identity.Requester)
 	DeclareFixedRolesFunc              func(...accesscontrol.RoleRegistration) error
@@ -77,6 +79,14 @@ func New() *Mock {
 	}
 
 	return mock
+}
+
+func (m *Mock) GetRoleByName(ctx context.Context, orgID int64, roleName string) (*accesscontrol.RoleDTO, error) {
+	m.Calls.GetRoleByName = append(m.Calls.GetRoleByName, []interface{}{ctx, orgID, roleName})
+	if m.GetRoleByNameFunc != nil {
+		return m.GetRoleByNameFunc(ctx, orgID, roleName)
+	}
+	return nil, nil
 }
 
 func (m *Mock) GetUsageStats(ctx context.Context) map[string]interface{} {
