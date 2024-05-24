@@ -33,10 +33,12 @@ func TestIntegrationTestDatasource(t *testing.T) {
 
 	// Create a single datasource
 	ds := helper.CreateDS(&datasources.AddDataSourceCommand{
-		Name:  "test",
-		Type:  datasources.DS_TESTDATA,
-		UID:   "test",
-		OrgID: int64(1),
+		BaseWriteDataSourceCommand: datasources.BaseWriteDataSourceCommand{
+			Name:  "test",
+			Type:  datasources.DS_TESTDATA,
+			UID:   "test",
+			OrgID: int64(1),
+		},
 	})
 	require.Equal(t, "test", ds.UID)
 

@@ -11173,6 +11173,7 @@
             "type": "string"
           },
           "version": {
+            "description": "Used for optimistic locking",
             "format": "int64",
             "type": "integer"
           },
