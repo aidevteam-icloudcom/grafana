@@ -68,7 +68,7 @@ export const SaveDashboardForm = ({
               })
             }
             label="Save current time range as dashboard default"
-            aria-label={selectors.pages.SaveDashboardModal.saveTimerange}
+            data-testid={selectors.pages.SaveDashboardModal.saveTimerange}
           />
         )}
         {hasVariableChanged && (
@@ -81,7 +81,7 @@ export const SaveDashboardForm = ({
               })
             }
             label="Save current variable values as dashboard default"
-            aria-label={selectors.pages.SaveDashboardModal.saveVariables}
+            data-testid={selectors.pages.SaveDashboardModal.saveVariables}
           />
         )}
         <div className={styles.message}>
@@ -122,7 +122,7 @@ export const SaveDashboardForm = ({
             type="submit"
             disabled={!saveModel.hasChanges || isLoading}
             icon={saving ? 'spinner' : undefined}
-            aria-label={selectors.pages.SaveDashboardModal.save}
+            data-testid={selectors.pages.SaveDashboardModal.save}
           >
             {isLoading ? 'Saving...' : 'Save'}
           </Button>
