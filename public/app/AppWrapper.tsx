@@ -1,7 +1,7 @@
 import { Action, KBarProvider } from 'kbar';
 import React, { ComponentType } from 'react';
 import { Provider } from 'react-redux';
-import { Router, Redirect, Switch, RouteComponentProps } from 'react-router-dom';
+import { Router, Redirect, Switch, RouteComponentProps, MemoryRouter } from 'react-router-dom';
 import { CompatRouter, CompatRoute } from 'react-router-dom-v5-compat';
 
 import { config, locationService, navigationLogger, reportInteraction } from '@grafana/runtime';
@@ -14,6 +14,7 @@ import { loadAndInitAngularIfEnabled } from './angular/loadAndInitAngularIfEnabl
 import { GrafanaApp } from './app';
 import { AppChrome } from './core/components/AppChrome/AppChrome';
 import { AppNotificationList } from './core/components/AppNotifications/AppNotificationList';
+import { SplitPaneWrapper } from './core/components/SplitPaneWrapper/SplitPaneWrapper';
 import { GrafanaContext } from './core/context/GrafanaContext';
 import { ModalsContextProvider } from './core/context/ModalsContextProvider';
 import { GrafanaRoute } from './core/navigation/GrafanaRoute';
@@ -21,6 +22,7 @@ import { RouteDescriptor } from './core/navigation/types';
 import { contextSrv } from './core/services/context_srv';
 import { ThemeProvider } from './core/utils/ConfigProvider';
 import { LiveConnectionWarning } from './features/live/LiveConnectionWarning';
+import AppRootPage from './features/plugins/components/AppRootPage';
 
 interface AppWrapperProps {
   app: GrafanaApp;
@@ -94,6 +96,8 @@ export class AppWrapper extends React.Component<AppWrapperProps, AppWrapperState
       });
     };
 
+    const secondAppId = 'grafana-querylibrary-app';
+
     return (
       <Provider store={store}>
         <ErrorBoundaryAlert style="page">
@@ -103,29 +107,51 @@ export class AppWrapper extends React.Component<AppWrapperProps, AppWrapperState
                 actions={[]}
                 options={{ enableHistory: true, callbacks: { onSelectAction: commandPaletteActionSelected } }}
               >
-                <Router history={locationService.getHistory()}>
-                  <CompatRouter>
-                    <ModalsContextProvider>
-                      <GlobalStyles />
-                      <div className="grafana-app">
-                        <AppChrome>
-                          {pageBanners.map((Banner, index) => (
-                            <Banner key={index.toString()} />
-                          ))}
-                          <AngularRoot />
-                          <AppNotificationList />
-                          {ready && this.renderRoutes()}
-                          {bodyRenderHooks.map((Hook, index) => (
-                            <Hook key={index.toString()} />
-                          ))}
-                        </AppChrome>
-                      </div>
-                      <LiveConnectionWarning />
-                      <ModalRoot />
-                      <PortalContainer />
-                    </ModalsContextProvider>
-                  </CompatRouter>
-                </Router>
+                <div className="grafana-app">
+                  <SplitPaneWrapper
+                    splitOrientation="vertical"
+                    paneSize={0.5}
+                    minSize={200}
+                    maxSize={200 * -1}
+                    primary="second"
+                    splitVisible={!!secondAppId}
+                    paneStyle={{ overflow: 'auto', display: 'flex', flexDirection: 'column' }}
+                  >
+                    <Router history={locationService.getHistory()}>
+                      <CompatRouter>
+                        <ModalsContextProvider>
+                          <GlobalStyles />
+                          <AppChrome>
+                            {pageBanners.map((Banner, index) => (
+                              <Banner key={index.toString()} />
+                            ))}
+                            <AngularRoot />
+                            <AppNotificationList />
+                            {ready && this.renderRoutes()}
+                            {bodyRenderHooks.map((Hook, index) => (
+                              <Hook key={index.toString()} />
+                            ))}
+                          </AppChrome>
+                          <LiveConnectionWarning />
+                          <ModalRoot />
+                          <PortalContainer />
+                        </ModalsContextProvider>
+                      </CompatRouter>
+                    </Router>
+                    {secondAppId && (
+                      <MemoryRouter>
+                        <CompatRouter>
+                          <ModalsContextProvider>
+                            <GlobalStyles />
+                            <AppChrome>
+                              <AppRootPage pluginId={secondAppId} />
+                            </AppChrome>
+                          </ModalsContextProvider>
+                        </CompatRouter>
+                      </MemoryRouter>
+                    )}
+                  </SplitPaneWrapper>
+                </div>
               </KBarProvider>
             </ThemeProvider>
           </GrafanaContext.Provider>
