@@ -7,10 +7,13 @@ import (
 	"strings"
 	"time"
 
+	zclient "github.com/grafana/zanzana/pkg/service/client"
+
 	"github.com/grafana/grafana/pkg/infra/db"
 	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/infra/metrics"
 	ac "github.com/grafana/grafana/pkg/services/accesscontrol"
+	"github.com/grafana/grafana/pkg/services/accesscontrol/embedserver"
 	"github.com/grafana/grafana/pkg/services/dashboards"
 	dashver "github.com/grafana/grafana/pkg/services/dashboardversion"
 	"github.com/grafana/grafana/pkg/services/featuremgmt"
@@ -33,6 +36,8 @@ type dashboardStore struct {
 	log        log.Logger
 	features   featuremgmt.FeatureToggles
 	tagService tag.Service
+	zClient    *zclient.GRPCClient
+	zService   *embedserver.Service
 }
 
 // SQL bean helper to save tags
@@ -45,8 +50,21 @@ type dashboardTag struct {
 // DashboardStore implements the Store interface
 var _ dashboards.Store = (*dashboardStore)(nil)
 
-func ProvideDashboardStore(sqlStore db.DB, cfg *setting.Cfg, features featuremgmt.FeatureToggles, tagService tag.Service, quotaService quota.Service) (dashboards.Store, error) {
-	s := &dashboardStore{store: sqlStore, cfg: cfg, log: log.New("dashboard-store"), features: features, tagService: tagService}
+func ProvideDashboardStore(sqlStore db.DB, cfg *setting.Cfg,
+	features featuremgmt.FeatureToggles, tagService tag.Service,
+	quotaService quota.Service, embedService *embedserver.Service) (dashboards.Store, error) {
+	zClient, err := embedService.GetClient(context.Background(), "1")
+	if err != nil {
+		return nil, err
+	}
+
+	s := &dashboardStore{store: sqlStore,
+		cfg:        cfg,
+		log:        log.New("dashboard-store"),
+		features:   features,
+		zClient:    zClient,
+		zService:   embedService,
+		tagService: tagService}
 
 	defaultLimits, err := readQuotaConfig(cfg)
 	if err != nil {
@@ -818,7 +836,58 @@ func (d *dashboardStore) GetDashboards(ctx context.Context, query *dashboards.Ge
 	return dashboards, nil
 }
 
+type evalResult struct {
+	runner    string
+	searchRes []dashboards.DashboardSearchProjection
+	err       error
+	duration  time.Duration
+}
+
 func (d *dashboardStore) FindDashboards(ctx context.Context, query *dashboards.FindPersistedDashboardsQuery) ([]dashboards.DashboardSearchProjection, error) {
+	res := make(chan evalResult, 2)
+	if d.zService.Cfg.SingleRead {
+		return d.findDashboardsZanzana(ctx, query)
+	}
+
+	go func() {
+		start := time.Now()
+		dashRes, err := d.findDashboardsZanzana(ctx, query)
+		res <- evalResult{"zanzana", dashRes, err, time.Since(start)}
+	}()
+
+	go func() {
+		start := time.Now()
+		dashRes, err := d.findDashboards(ctx, query)
+		res <- evalResult{"grafana", dashRes, err, time.Since(start)}
+	}()
+
+	first, second := <-res, <-res
+	close(res)
+
+	if second.runner == "grafana" {
+		first, second = second, first
+	}
+
+	if len(first.searchRes) != len(second.searchRes) {
+		d.log.Error(
+			"search_eval result diff",
+			"grafana_res", len(first.searchRes),
+			"zanana_res", len(second.searchRes),
+			"grafana_ms", first.duration,
+			"zanzana_ms", second.duration,
+		)
+	} else {
+		d.log.Info("search_eval: correct result", "grafana_ms", first.duration, "zanzana_ms", second.duration, "result_len", len(first.searchRes))
+	}
+
+	if d.zService.Cfg.DashboardReadResult {
+		return second.searchRes, second.err
+	}
+
+	return first.searchRes, first.err
+}
+
+func (d *dashboardStore) findDashboards(ctx context.Context, query *dashboards.FindPersistedDashboardsQuery) ([]dashboards.DashboardSearchProjection, error) {
 	recursiveQueriesAreSupported, err := d.store.RecursiveQueriesAreSupported()
 	if err != nil {
 		return nil, err

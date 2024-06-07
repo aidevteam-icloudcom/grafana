@@ -3,22 +3,31 @@ package acimpl
 import (
 	"context"
 	"errors"
+	"strconv"
+	"time"
 
+	zclient "github.com/grafana/zanzana/pkg/service/client"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/infra/metrics"
 	"github.com/grafana/grafana/pkg/services/accesscontrol"
+	"github.com/grafana/grafana/pkg/services/accesscontrol/embedserver"
 	"github.com/grafana/grafana/pkg/services/auth/identity"
 	"github.com/grafana/grafana/pkg/services/featuremgmt"
 )
 
 var _ accesscontrol.AccessControl = new(AccessControl)
 
-func ProvideAccessControl(features featuremgmt.FeatureToggles) *AccessControl {
+func ProvideAccessControl(features featuremgmt.FeatureToggles, embed *embedserver.Service) *AccessControl {
 	logger := log.New("accesscontrol")
+	c, err := embed.GetClient(context.Background(), "1")
+	if err != nil {
+		panic(err)
+	}
+
 	return &AccessControl{
-		features, logger, accesscontrol.NewResolvers(logger),
+		features, logger, accesscontrol.NewResolvers(logger), c, embed,
 	}
 }
 
@@ -26,6 +35,15 @@ type AccessControl struct {
 	features  featuremgmt.FeatureToggles
 	log       log.Logger
 	resolvers accesscontrol.Resolvers
+	zclient   *zclient.GRPCClient
+	zService  *embedserver.Service
+}
+
+type evalResult struct {
+	runner   string
+	decision bool
+	err      error
+	duration time.Duration
 }
 
 func (a *AccessControl) Evaluate(ctx context.Context, user identity.Requester, evaluator accesscontrol.Evaluator) (bool, error) {
@@ -38,6 +56,50 @@ func (a *AccessControl) Evaluate(ctx context.Context, user identity.Requester, e
 		return false, nil
 	}
 
+	if a.zService.Cfg.SingleRead {
+		return a.evalZanzana(ctx, user, evaluator)
+	}
+
+	res := make(chan evalResult, 2)
+	go func() {
+		start := time.Now()
+		hasAccess, err := a.evalZanzana(ctx, user, evaluator)
+		res <- evalResult{"zanzana", hasAccess, err, time.Since(start)}
+	}()
+
+	go func() {
+		start := time.Now()
+		hasAccess, err := a.evalGrafana(ctx, user, evaluator)
+		res <- evalResult{"grafana", hasAccess, err, time.Since(start)}
+	}()
+	first, second := <-res, <-res
+	close(res)
+
+	if second.runner == "grafana" {
+		first, second = second, first
+	}
+
+	if first.decision != second.decision {
+		a.log.Error(
+			"eval result diff",
+			"grafana_desision", first.decision,
+			"zanana_descision", second.decision,
+			"grafana_ms", first.duration,
+			"zanzana_ms", second.duration,
+			"eval", evaluator.GoString(),
+		)
+	} else {
+		a.log.Info("eval: correct result", "grafana_ms", first.duration, "zanzana_ms", second.duration)
+	}
+
+	if a.zService.Cfg.EvaluationResult {
+		return second.decision, second.err
+	}
+
+	return first.decision, first.err
+}
+
+func (a *AccessControl) evalGrafana(ctx context.Context, user identity.Requester, evaluator accesscontrol.Evaluator) (bool, error) {
 	// If the user is in no organization, then the evaluation must happen based on the user's global permissions
 	permissions := user.GetPermissions()
 	if user.GetOrgID() == accesscontrol.NoOrgID {
@@ -64,6 +126,19 @@ func (a *AccessControl) Evaluate(ctx context.Context, user identity.Requester, e
 
 	a.debug(ctx, user, "Evaluating resolved permissions", resolvedEvaluator)
 	return resolvedEvaluator.Evaluate(permissions), nil
+}
+
+func (a *AccessControl) evalZanzana(ctx context.Context, user identity.Requester, evaluator accesscontrol.Evaluator) (bool, error) {
+	// TODO: let evaluator issue request, then we don't have to rebuild a tree
+	eval, err := evaluator.MutateScopes(ctx, a.resolvers.GetScopeAttributeMutator(user.GetOrgID()))
+	if err != nil {
+		if !errors.Is(err, accesscontrol.ErrResolverNotFound) {
+			return false, err
+		}
+		eval = evaluator
+	}
+
+	return eval.EvaluateZanzana(ctx, user.GetID().String(), strconv.FormatInt(user.GetOrgID(), 10), a.zclient)
 }
 
 func (a *AccessControl) RegisterScopeAttributeResolver(prefix string, resolver accesscontrol.ScopeAttributeResolver) {

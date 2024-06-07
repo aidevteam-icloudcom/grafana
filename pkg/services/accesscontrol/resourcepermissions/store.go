@@ -3,11 +3,14 @@ package resourcepermissions
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/grafana/grafana/pkg/infra/db"
+	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/services/accesscontrol"
+	"github.com/grafana/grafana/pkg/services/accesscontrol/embedserver"
 	"github.com/grafana/grafana/pkg/services/dashboards"
 	"github.com/grafana/grafana/pkg/services/featuremgmt"
 	"github.com/grafana/grafana/pkg/services/org"
@@ -16,17 +19,24 @@ import (
 	"github.com/grafana/grafana/pkg/services/user"
 	"github.com/grafana/grafana/pkg/setting"
 	"github.com/grafana/grafana/pkg/util"
+
+	zclient "github.com/grafana/zanzana/pkg/service/client"
+	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 )
 
-func NewStore(cfg *setting.Cfg, sql db.DB, features featuremgmt.FeatureToggles) *store {
-	store := &store{cfg: cfg, sql: sql, features: features}
-	return store
+func NewStore(cfg *setting.Cfg, sql db.DB, features featuremgmt.FeatureToggles, embedServer *embedserver.Service) *store {
+	zClient, _ := embedServer.GetClient(context.Background(), "1")
+	logger := log.New("resourcepermissions.store")
+	return &store{cfg, sql, features, embedServer, zClient, logger}
 }
 
 type store struct {
-	cfg      *setting.Cfg
-	sql      db.DB
-	features featuremgmt.FeatureToggles
+	cfg            *setting.Cfg
+	sql            db.DB
+	features       featuremgmt.FeatureToggles
+	zanzanaService *embedserver.Service
+	zClient        *zclient.GRPCClient
+	logger         log.Logger
 }
 
 type flatResourcePermission struct {
@@ -234,7 +244,7 @@ func (s *store) SetResourcePermissions(
 	return permissions, err
 }
 
-type roleAdder func(roleID int64) error
+type roleAdder func(role *accesscontrol.Role) error
 
 func (s *store) setResourcePermission(
 	sess *db.Session, orgID int64, roleName string, adder roleAdder, cmd SetResourcePermissionCommand,
@@ -243,6 +253,9 @@ func (s *store) setResourcePermission(
 	if err != nil {
 		return nil, err
 	}
+
+	writeTuples := make([]*openfgav1.TupleKey, 0, len(cmd.Actions))
+	deleteTuples := make([]*openfgav1.TupleKeyWithoutCondition, 0, len(cmd.Actions))
 
 	rawSQL := `SELECT p.* FROM permission as p INNER JOIN role r on r.id = p.role_id WHERE r.id = ? AND p.scope = ?`
 
@@ -255,6 +268,19 @@ func (s *store) setResourcePermission(
 	missing := make(map[string]struct{}, len(cmd.Actions))
 	for _, a := range cmd.Actions {
 		missing[a] = struct{}{}
+		// Fixme: this should be handled in lib
+		container := zclient.FolderContainer
+		if cmd.Resource != "folders" {
+			container = ""
+		}
+		// Fixme: don't need to always write everything
+		relation, object := zclient.ConvertToRelationObject(a, scope, cmd.ResourceID, container)
+		s.logger.Debug("Adding permission to tuple", "role", role.UID, "relation", relation, "object", object)
+		writeTuples = append(writeTuples, &openfgav1.TupleKey{
+			User:     "role:" + role.UID + "#assignee",
+			Relation: relation,
+			Object:   object,
+		})
 	}
 
 	var remove []int64
@@ -263,6 +289,17 @@ func (s *store) setResourcePermission(
 			delete(missing, p.Action)
 		} else if !ok {
 			remove = append(remove, p.ID)
+			container := zclient.FolderContainer
+			if cmd.Resource != "folders" { // this should be handled in lib
+				container = ""
+			}
+			relation, object := zclient.ConvertToRelationObject(p.Action, scope, cmd.ResourceID, container)
+			s.logger.Debug("Adding permission to tuple", "role", role.UID, "relation", relation, "object", object)
+			deleteTuples = append(deleteTuples, &openfgav1.TupleKeyWithoutCondition{
+				User:     "role:" + role.UID + "#assignee",
+				Relation: relation,
+				Object:   object,
+			})
 		}
 	}
 
@@ -271,6 +308,21 @@ func (s *store) setResourcePermission(
 	}
 
 	if err := s.createPermissions(sess, role.ID, cmd, missing); err != nil {
+		return nil, err
+	}
+
+	writeReq := &openfgav1.WriteRequest{
+		StoreId:              s.zClient.MustStoreID(context.Background()),
+		AuthorizationModelId: s.zClient.AuthorizationModelID,
+	}
+	if len(writeTuples) != 0 {
+		writeReq.Writes = &openfgav1.WriteRequestWrites{TupleKeys: writeTuples}
+	}
+	if len(deleteTuples) != 0 {
+		writeReq.Deletes = &openfgav1.WriteRequestDeletes{TupleKeys: deleteTuples}
+	}
+	_, err = s.zClient.Write(context.Background(), writeReq)
+	if err != nil {
 		return nil, err
 	}
 
@@ -520,8 +572,8 @@ func flatPermissionsToResourcePermission(scope string, permissions []flatResourc
 }
 
 func (s *store) userAdder(sess *db.Session, orgID, userID int64) roleAdder {
-	return func(roleID int64) error {
-		if res, err := sess.Query("SELECT 1 FROM user_role WHERE org_id=? AND user_id=? AND role_id=?", orgID, userID, roleID); err != nil {
+	return func(role *accesscontrol.Role) error {
+		if res, err := sess.Query("SELECT 1 FROM user_role WHERE org_id=? AND user_id=? AND role_id=?", orgID, userID, role.ID); err != nil {
 			return err
 		} else if len(res) == 1 {
 			return fmt.Errorf("role is already added to this user")
@@ -530,19 +582,36 @@ func (s *store) userAdder(sess *db.Session, orgID, userID int64) roleAdder {
 		userRole := &accesscontrol.UserRole{
 			OrgID:   orgID,
 			UserID:  userID,
-			RoleID:  roleID,
+			RoleID:  role.ID,
 			Created: time.Now(),
 		}
 
 		_, err := sess.Insert(userRole)
+		if err != nil {
+			return err
+		}
+
+		_, err = s.zClient.Write(context.Background(), &openfgav1.WriteRequest{
+			StoreId:              s.zClient.MustStoreID(context.Background()),
+			AuthorizationModelId: s.zClient.AuthorizationModelID,
+			Writes: &openfgav1.WriteRequestWrites{
+				TupleKeys: []*openfgav1.TupleKey{
+					{
+						User:     "user:" + strconv.FormatInt(userID, 10),
+						Relation: "assignee",
+						Object:   "role:" + role.UID,
+					},
+				},
+			},
+		})
 
 		return err
 	}
 }
 
 func (s *store) teamAdder(sess *db.Session, orgID, teamID int64) roleAdder {
-	return func(roleID int64) error {
-		if res, err := sess.Query("SELECT 1 FROM team_role WHERE org_id=? AND team_id=? AND role_id=?", orgID, teamID, roleID); err != nil {
+	return func(role *accesscontrol.Role) error {
+		if res, err := sess.Query("SELECT 1 FROM team_role WHERE org_id=? AND team_id=? AND role_id=?", orgID, teamID, role.ID); err != nil {
 			return err
 		} else if len(res) == 1 {
 			return fmt.Errorf("role is already added to this team")
@@ -551,29 +620,64 @@ func (s *store) teamAdder(sess *db.Session, orgID, teamID int64) roleAdder {
 		teamRole := &accesscontrol.TeamRole{
 			OrgID:   orgID,
 			TeamID:  teamID,
-			RoleID:  roleID,
+			RoleID:  role.ID,
 			Created: time.Now(),
 		}
 
 		_, err := sess.Insert(teamRole)
+		if err != nil {
+			return err
+		}
+
+		_, err = s.zClient.Write(context.Background(), &openfgav1.WriteRequest{
+			StoreId:              s.zClient.MustStoreID(context.Background()),
+			AuthorizationModelId: s.zClient.AuthorizationModelID,
+			Writes: &openfgav1.WriteRequestWrites{
+				TupleKeys: []*openfgav1.TupleKey{
+					{
+						User:     "team:" + strconv.FormatInt(teamID, 10) + "#member",
+						Relation: "assignee",
+						Object:   "role:" + role.UID,
+					},
+				},
+			},
+		})
+
 		return err
 	}
 }
 
 func (s *store) builtInRoleAdder(sess *db.Session, orgID int64, builtinRole string) roleAdder {
-	return func(roleID int64) error {
-		if res, err := sess.Query("SELECT 1 FROM builtin_role WHERE role_id=? AND role=? AND org_id=?", roleID, builtinRole, orgID); err != nil {
+	return func(role *accesscontrol.Role) error {
+		if res, err := sess.Query("SELECT 1 FROM builtin_role WHERE role_id=? AND role=? AND org_id=?", role.ID, builtinRole, orgID); err != nil {
 			return err
 		} else if len(res) == 1 {
 			return fmt.Errorf("built-in role already has the role granted")
 		}
 
 		_, err := sess.Table("builtin_role").Insert(accesscontrol.BuiltinRole{
-			RoleID:  roleID,
+			RoleID:  role.ID,
 			OrgID:   orgID,
 			Role:    builtinRole,
 			Updated: time.Now(),
 			Created: time.Now(),
+		})
+		if err != nil {
+			return err
+		}
+
+		_, err = s.zClient.Write(context.Background(), &openfgav1.WriteRequest{
+			StoreId:              s.zClient.MustStoreID(context.Background()),
+			AuthorizationModelId: s.zClient.AuthorizationModelID,
+			Writes: &openfgav1.WriteRequestWrites{
+				TupleKeys: []*openfgav1.TupleKey{
+					{
+						User:     zclient.GenerateBasicRoleResource(builtinRole, orgID) + "#assignee",
+						Relation: "assignee",
+						Object:   "role:" + role.UID,
+					},
+				},
+			},
 		})
 
 		return err
@@ -603,9 +707,24 @@ func (s *store) getOrCreateManagedRole(sess *db.Session, orgID int64, name strin
 			return nil, err
 		}
 
-		if err := add(role.ID); err != nil {
+		if err := add(&role); err != nil {
 			return nil, err
 		}
+
+		// Scope role to org
+		_, err = s.zClient.Write(context.Background(), &openfgav1.WriteRequest{
+			StoreId:              s.zClient.MustStoreID(context.Background()),
+			AuthorizationModelId: s.zClient.AuthorizationModelID,
+			Writes: &openfgav1.WriteRequestWrites{
+				TupleKeys: []*openfgav1.TupleKey{
+					{
+						User:     "org:" + strconv.FormatInt(orgID, 10),
+						Relation: "org",
+						Object:   "role:" + role.UID,
+					},
+				},
+			},
+		})
 	}
 
 	if err != nil {

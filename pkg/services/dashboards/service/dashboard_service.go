@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/infra/metrics"
 	"github.com/grafana/grafana/pkg/services/accesscontrol"
+	"github.com/grafana/grafana/pkg/services/accesscontrol/embedserver"
 	"github.com/grafana/grafana/pkg/services/auth/identity"
 	"github.com/grafana/grafana/pkg/services/dashboards"
 	"github.com/grafana/grafana/pkg/services/dashboards/dashboardaccess"
@@ -28,6 +30,9 @@ import (
 	"github.com/grafana/grafana/pkg/services/store/entity"
 	"github.com/grafana/grafana/pkg/setting"
 	"github.com/grafana/grafana/pkg/util"
+
+	zclient "github.com/grafana/zanzana/pkg/service/client"
+	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 )
 
 var (
@@ -57,6 +62,7 @@ type DashboardServiceImpl struct {
 	dashboardPermissions accesscontrol.DashboardPermissionsService
 	ac                   accesscontrol.AccessControl
 	metrics              *dashboardsMetrics
+	zClient              *zclient.GRPCClient
 }
 
 // This is the uber service that implements a three smaller services
@@ -64,8 +70,13 @@ func ProvideDashboardServiceImpl(
 	cfg *setting.Cfg, dashboardStore dashboards.Store, folderStore folder.FolderStore,
 	features featuremgmt.FeatureToggles, folderPermissionsService accesscontrol.FolderPermissionsService,
 	dashboardPermissionsService accesscontrol.DashboardPermissionsService, ac accesscontrol.AccessControl,
-	folderSvc folder.Service, r prometheus.Registerer,
+	folderSvc folder.Service, r prometheus.Registerer, embedServer *embedserver.Service,
 ) (*DashboardServiceImpl, error) {
+	zClient, err := embedServer.GetClient(context.Background(), "1")
+	if err != nil {
+		return nil, err
+	}
+
 	dashSvc := &DashboardServiceImpl{
 		cfg:                  cfg,
 		log:                  log.New("dashboard-service"),
@@ -77,6 +88,7 @@ func ProvideDashboardServiceImpl(
 		folderStore:          folderStore,
 		folderService:        folderSvc,
 		metrics:              newDashboardsMetrics(r),
+		zClient:              zClient,
 	}
 
 	ac.RegisterScopeAttributeResolver(dashboards.NewDashboardIDScopeResolver(folderStore, dashSvc, folderSvc))
@@ -365,6 +377,34 @@ func (dr *DashboardServiceImpl) SaveDashboard(ctx context.Context, dto *dashboar
 	// new dashboard created
 	if dto.Dashboard.ID == 0 {
 		dr.setDefaultPermissions(ctx, dto, dash, false)
+		tupleKeys := []*openfgav1.TupleKey{
+			{
+				User:     "org:" + strconv.FormatInt(dash.OrgID, 10),
+				Relation: "org",
+				Object:   "dashboard:" + dash.UID,
+			},
+		}
+
+		if dash.FolderUID != "" {
+			tupleKeys = append(tupleKeys, &openfgav1.TupleKey{
+				User:     "folder:" + dash.FolderUID,
+				Relation: "folder",
+				Object:   "dashboard:" + dash.UID,
+			})
+		}
+
+		if len(tupleKeys) > 0 {
+			_, err := dr.zClient.Write(ctx, &openfgav1.WriteRequest{
+				StoreId:              dr.zClient.MustStoreID(ctx),
+				AuthorizationModelId: dr.zClient.AuthorizationModelID,
+				Writes: &openfgav1.WriteRequestWrites{
+					TupleKeys: tupleKeys,
+				},
+			})
+			if err != nil {
+				dr.log.Error("failed to write tuple keys", "error", err)
+			}
+		}
 	}
 
 	return dash, nil
@@ -667,6 +707,7 @@ func (dr *DashboardServiceImpl) FindDashboards(ctx context.Context, query *dashb
 			dr.metrics.sharedWithMeFetchDashboardsRequestsDuration.WithLabelValues("success").Observe(time.Since(start).Seconds())
 		}(time.Now())
 	}
+
 	return dr.dashboardStore.FindDashboards(ctx, query)
 }
 

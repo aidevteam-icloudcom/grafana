@@ -10,22 +10,33 @@ import (
 	"github.com/grafana/grafana/pkg/infra/tracing"
 	"github.com/grafana/grafana/pkg/services/team"
 	"github.com/grafana/grafana/pkg/setting"
+
+	"github.com/grafana/grafana/pkg/services/accesscontrol/embedserver"
+
+	zclient "github.com/grafana/zanzana/pkg/service/client"
 )
 
 type Service struct {
-	store  store
-	tracer tracing.Tracer
+	store   store
+	tracer  tracing.Tracer
+	zClient *zclient.GRPCClient
 }
 
-func ProvideService(db db.DB, cfg *setting.Cfg, tracer tracing.Tracer) (team.Service, error) {
+func ProvideService(db db.DB, cfg *setting.Cfg, tracer tracing.Tracer, embedServer *embedserver.Service) (team.Service, error) {
 	store := &xormStore{db: db, cfg: cfg, deletes: []string{}}
 
 	if err := store.uidMigration(); err != nil {
 		return nil, err
 	}
+	zClient, err := embedServer.GetClient(context.Background(), "1")
+	if err != nil {
+		return nil, err
+	}
+
 	return &Service{
-		store:  &xormStore{db: db, cfg: cfg, deletes: []string{}},
-		tracer: tracer,
+		store:   store,
+		tracer:  tracer,
+		zClient: zClient,
 	}, nil
 }
 
