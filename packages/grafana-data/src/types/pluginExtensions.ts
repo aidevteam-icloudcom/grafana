@@ -14,6 +14,7 @@ import { RawTimeRange, TimeZone } from './time';
 export enum PluginExtensionTypes {
   link = 'link',
   component = 'component',
+  function = 'function',
 }
 
 type PluginExtensionBase = {
@@ -37,7 +38,12 @@ export type PluginExtensionComponent<Props = {}> = PluginExtensionBase & {
   component: React.ComponentType<Props>;
 };
 
-export type PluginExtension = PluginExtensionLink | PluginExtensionComponent;
+export type PluginExtensionFunction<T = Function> = PluginExtensionBase & {
+  type: PluginExtensionTypes.function;
+  function: T;
+};
+
+export type PluginExtension = PluginExtensionLink | PluginExtensionComponent | PluginExtensionFunction;
 
 // Objects used for registering extensions (in app plugins)
 // --------------------------------------------------------
@@ -91,7 +97,23 @@ export type PluginExtensionComponentConfig<Props = {}> = {
   extensionPointId: string;
 };
 
-export type PluginExtensionConfig = PluginExtensionLinkConfig | PluginExtensionComponentConfig;
+export type PluginExtensionFunctionConfig<Fn = Function> = {
+  type: PluginExtensionTypes.function;
+  title: string;
+  description: string;
+
+  // A function that the plugin registers
+  function: Fn;
+
+  // The unique identifier of the Extension Point
+  // (Core Grafana extension point ids are available in the `PluginExtensionPoints` enum)
+  extensionPointId: string;
+};
+
+export type PluginExtensionConfig =
+  | PluginExtensionLinkConfig
+  | PluginExtensionComponentConfig
+  | PluginExtensionFunctionConfig;
 
 export type PluginExtensionOpenModalOptions = {
   // The title of the modal
@@ -125,6 +147,33 @@ export enum PluginExtensionPoints {
   ExploreToolbarAction = 'grafana/explore/toolbar/action',
   UserProfileTab = 'grafana/user/profile/tab',
 }
+
+export const PluginExtensionPointsMeta = {
+  [PluginExtensionPoints.AlertInstanceAction]: {
+    title: 'Alert instance actions',
+    description: 'Add custom actions to alert instances',
+  },
+  [PluginExtensionPoints.CommandPalette]: {
+    title: 'Command palette',
+    description: 'Extend the command palette with custom actions',
+  },
+  [PluginExtensionPoints.DashboardPanelMenu]: {
+    title: 'Dashboard panel menu',
+    description: 'Add custom actions to panel menu',
+  },
+  [PluginExtensionPoints.DataSourceConfig]: {
+    title: 'Data source configuration',
+    description: 'Add custom configuration options to data sources configuration page',
+  },
+  [PluginExtensionPoints.ExploreToolbarAction]: {
+    title: 'Explore toolbar action',
+    description: 'Add custom actions to the explore toolbar',
+  },
+  [PluginExtensionPoints.UserProfileTab]: {
+    title: 'User profile tab',
+    description: 'Add custom tabs to the user profile page',
+  },
+};
 
 export type PluginExtensionPanelContext = {
   pluginId: string;

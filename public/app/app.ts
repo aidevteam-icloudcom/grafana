@@ -37,6 +37,7 @@ import {
   setAppEvents,
   setReturnToPreviousHook,
   setPluginExtensionsHook,
+  setPluginCapabilityGetter,
 } from '@grafana/runtime';
 import { setPanelDataErrorView } from '@grafana/runtime/src/components/PanelDataErrorView';
 import { setPanelRenderer } from '@grafana/runtime/src/components/PanelRenderer';
@@ -81,8 +82,11 @@ import { PanelDataErrorView } from './features/panel/components/PanelDataErrorVi
 import { PanelRenderer } from './features/panel/components/PanelRenderer';
 import { DatasourceSrv } from './features/plugins/datasource_srv';
 import { getCoreExtensionConfigurations } from './features/plugins/extensions/getCoreExtensionConfigurations';
-import { createPluginExtensionsGetter } from './features/plugins/extensions/getPluginExtensions';
-import { ReactivePluginExtensionsRegistry } from './features/plugins/extensions/reactivePluginExtensionRegistry';
+import {
+  createPluginCapabilityGetter,
+  createPluginExtensionsGetter,
+} from './features/plugins/extensions/getPluginExtensions';
+import { reactivePluginExtensionRegistry } from './features/plugins/extensions/reactivePluginExtensionRegistry';
 import { createPluginExtensionsHook } from './features/plugins/extensions/usePluginExtensions';
 import { importPanelPlugin, syncGetPanelPlugin } from './features/plugins/importPanelPlugin';
 import { preloadPlugins } from './features/plugins/pluginPreloader';
@@ -208,8 +212,7 @@ export class GrafanaApp {
       initWindowRuntime();
 
       // Initialize plugin extensions
-      const extensionsRegistry = new ReactivePluginExtensionsRegistry();
-      extensionsRegistry.register({
+      reactivePluginExtensionRegistry.register({
         pluginId: 'grafana',
         extensionConfigs: getCoreExtensionConfigurations(),
       });
@@ -221,12 +224,13 @@ export class GrafanaApp {
         const awaitedAppPlugins = Object.values(config.apps).filter((app) => awaitedAppPluginIds.includes(app.id));
         const appPlugins = Object.values(config.apps).filter((app) => !awaitedAppPluginIds.includes(app.id));
 
-        preloadPlugins(appPlugins, extensionsRegistry);
-        await preloadPlugins(awaitedAppPlugins, extensionsRegistry, 'frontend_awaited_plugins_preload');
+        preloadPlugins(appPlugins, reactivePluginExtensionRegistry);
+        await preloadPlugins(awaitedAppPlugins, reactivePluginExtensionRegistry, 'frontend_awaited_plugins_preload');
       }
 
-      setPluginExtensionGetter(createPluginExtensionsGetter(extensionsRegistry));
-      setPluginExtensionsHook(createPluginExtensionsHook(extensionsRegistry));
+      setPluginExtensionGetter(createPluginExtensionsGetter(reactivePluginExtensionRegistry));
+      setPluginExtensionsHook(createPluginExtensionsHook(reactivePluginExtensionRegistry));
+      setPluginCapabilityGetter(createPluginCapabilityGetter(reactivePluginExtensionRegistry));
 
       // initialize chrome service
       const queryParams = locationService.getSearchObject();
