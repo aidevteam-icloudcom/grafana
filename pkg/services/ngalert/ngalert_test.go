@@ -39,9 +39,8 @@ func Test_subscribeToFolderChanges(t *testing.T) {
 
 	subscribeToFolderChanges(log.New("test"), bus, db)
 
-	err := bus.Publish(context.Background(), &events.FolderTitleUpdated{
+	err := bus.Publish(context.Background(), &events.FolderFullPathUpdated{
 		Timestamp: time.Now(),
-		Title:     "Folder" + util.GenerateShortUID(),
 		UID:       folder.UID,
 		OrgID:     orgID,
 	})
