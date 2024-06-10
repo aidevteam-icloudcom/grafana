@@ -14,12 +14,12 @@ import (
 	"github.com/grafana/grafana/pkg/services/accesscontrol"
 	"github.com/grafana/grafana/pkg/services/accesscontrol/embedserver"
 	"github.com/grafana/grafana/pkg/services/auth/identity"
-	"github.com/grafana/grafana/pkg/setting"
+	"github.com/grafana/grafana/pkg/services/featuremgmt"
 )
 
 var _ accesscontrol.AccessControl = new(AccessControl)
 
-func ProvideAccessControl(cfg *setting.Cfg, embed *embedserver.Service) *AccessControl {
+func ProvideAccessControl(features featuremgmt.FeatureToggles, registerer prometheus.Registerer, embed *embedserver.Service) *AccessControl {
 	logger := log.New("accesscontrol")
 	c, err := embed.GetClient(context.Background(), "1")
 	if err != nil {
@@ -27,13 +27,14 @@ func ProvideAccessControl(cfg *setting.Cfg, embed *embedserver.Service) *AccessC
 	}
 
 	return &AccessControl{
-		cfg, logger, accesscontrol.NewResolvers(logger), c, embed,
+		features, logger, newMetrics(registerer), accesscontrol.NewResolvers(logger), c, embed,
 	}
 }
 
 type AccessControl struct {
-	cfg       *setting.Cfg
+	features  featuremgmt.FeatureToggles
 	log       log.Logger
+	metrics   *serviceMetrics
 	resolvers accesscontrol.Resolvers
 	zclient   *zclient.GRPCClient
 	zService  *embedserver.Service
@@ -56,22 +57,24 @@ func (a *AccessControl) Evaluate(ctx context.Context, user identity.Requester, e
 		return false, nil
 	}
 
-	if user.GetID() == "" {
-		return false, nil
-	}
-
 	if a.zService.Cfg.SingleRead {
 		return a.evalZanzana(ctx, user, evaluator)
 	}
 
 	res := make(chan evalResult, 2)
 	go func() {
+		timer := prometheus.NewTimer(a.metrics.engineEvaluationSummary.WithLabelValues("zanzana"))
+		defer timer.ObserveDuration()
+
 		start := time.Now()
 		hasAccess, err := a.evalZanzana(ctx, user, evaluator)
 		res <- evalResult{"zanzana", hasAccess, err, time.Since(start)}
 	}()
 
 	go func() {
+		timer := prometheus.NewTimer(a.metrics.engineEvaluationSummary.WithLabelValues("rbac"))
+		defer timer.ObserveDuration()
+
 		start := time.Now()
 		hasAccess, err := a.evalGrafana(ctx, user, evaluator)
 		res <- evalResult{"grafana", hasAccess, err, time.Since(start)}
@@ -84,6 +87,7 @@ func (a *AccessControl) Evaluate(ctx context.Context, user identity.Requester, e
 	}
 
 	if first.decision != second.decision {
+		a.metrics.zanzanaCheck.WithLabelValues("failure").Inc()
 		a.log.Error(
 			"eval result diff",
 			"grafana_desision", first.decision,
@@ -93,7 +97,8 @@ func (a *AccessControl) Evaluate(ctx context.Context, user identity.Requester, e
 			"eval", evaluator.GoString(),
 		)
 	} else {
-		a.log.Info("eval: correct result", "grafana_ms", first.duration, "zanzana_ms", second.duration)
+		a.metrics.zanzanaCheck.WithLabelValues("success").Inc()
+		a.log.Debug("eval: correct result", "grafana_ms", first.duration, "zanzana_ms", second.duration)
 	}
 
 	if a.zService.Cfg.EvaluationResult {
@@ -142,7 +147,7 @@ func (a *AccessControl) evalZanzana(ctx context.Context, user identity.Requester
 		eval = evaluator
 	}
 
-	return eval.EvaluateZanzana(ctx, user.GetID(), strconv.FormatInt(user.GetOrgID(), 10), a.zclient)
+	return eval.EvaluateZanzana(ctx, user.GetID().String(), strconv.FormatInt(user.GetOrgID(), 10), a.zclient)
 }
 
 func (a *AccessControl) RegisterScopeAttributeResolver(prefix string, resolver accesscontrol.ScopeAttributeResolver) {
