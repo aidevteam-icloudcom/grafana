@@ -46,6 +46,7 @@ func (mc *Mimir) GetGrafanaAlertmanagerConfig(ctx context.Context) (*UserGrafana
 }
 
 func (mc *Mimir) CreateGrafanaAlertmanagerConfig(ctx context.Context, cfg *apimodels.PostableUserConfig, hash string, createdAt int64, isDefault bool) error {
+	fmt.Println("Sending config with promoted =", mc.promoteConfig)
 	payload, err := json.Marshal(&UserGrafanaConfig{
 		GrafanaAlertmanagerConfig: cfg,
 		Hash:                      hash,

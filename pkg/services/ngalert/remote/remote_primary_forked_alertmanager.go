@@ -112,6 +112,7 @@ func (fam *RemotePrimaryForkedAlertmanager) GetAlertGroups(ctx context.Context, 
 
 func (fam *RemotePrimaryForkedAlertmanager) PutAlerts(ctx context.Context, alerts apimodels.PostableAlerts) error {
 	return fam.remote.PutAlerts(ctx, alerts)
+	// TODO: no-op sender for internal.
 }
 
 func (fam *RemotePrimaryForkedAlertmanager) GetReceivers(ctx context.Context) ([]apimodels.Receiver, error) {

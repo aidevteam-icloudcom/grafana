@@ -819,6 +819,10 @@ func (_c *RemoteAlertmanagerMock_SaveAndApplyDefaultConfig_Call) RunAndReturn(ru
 func (_m *RemoteAlertmanagerMock) SilenceState(_a0 context.Context) (notify.SilenceState, error) {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for SilenceState")
+	}
+
 	var r0 notify.SilenceState
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context) (notify.SilenceState, error)); ok {
