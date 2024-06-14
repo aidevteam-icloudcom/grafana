@@ -124,6 +124,7 @@ export const LinkButton = React.forwardRef<HTMLAnchorElement, ButtonLinkProps>(
       disabled,
       tooltip,
       tooltipPlacement,
+      href,
       ...otherProps
     },
     ref
@@ -153,8 +154,10 @@ export const LinkButton = React.forwardRef<HTMLAnchorElement, ButtonLinkProps>(
       <a
         className={linkButtonStyles}
         {...otherProps}
-        tabIndex={disabled ? -1 : 0}
         aria-disabled={disabled}
+        tabIndex={disabled ? 0 : undefined}
+        role={disabled ? 'link' : undefined}
+        href={disabled ? undefined : href}
         ref={tooltip ? undefined : ref}
       >
         <IconRenderer icon={icon} size={size} className={styles.icon} />
