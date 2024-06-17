@@ -44,6 +44,7 @@ export function DashboardSceneRenderer({ model }: SceneComponentProps<DashboardS
 
   return (
     <Page navModel={navModel} pageNav={pageNav} layout={PageLayoutType.Custom}>
+      <NavToolbarActions dashboard={model} />
       {editPanel && <editPanel.Component model={editPanel} />}
       {!editPanel && (
         <div
@@ -55,7 +56,6 @@ export function DashboardSceneRenderer({ model }: SceneComponentProps<DashboardS
           )}
         >
           {scopes && <scopes.Component model={scopes} />}
-          <NavToolbarActions dashboard={model} />
           {!isHomePage && controls && (
             <div
               className={cx(styles.controlsWrapper, scopes && !isScopesExpanded && styles.controlsWrapperWithScopes)}
