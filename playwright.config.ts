@@ -4,6 +4,7 @@ import path, { dirname } from 'path';
 import { PluginOptions } from '@grafana/plugin-e2e';
 
 const testDirRoot = 'e2e/plugin-e2e/';
+const e2eDirRoot = 'e2e/';
 
 export default defineConfig<PluginOptions>({
   fullyParallel: true,
@@ -24,13 +25,13 @@ export default defineConfig<PluginOptions>({
   projects: [
     // Login to Grafana with admin user and store the cookie on disk for use in other tests
     {
-      name: 'authenticate',
+      name: 'plugin-e2e-authenticate',
       testDir: `${dirname(require.resolve('@grafana/plugin-e2e'))}/auth`,
       testMatch: [/.*\.js/],
     },
     // Login to Grafana with new user with viewer role and store the cookie on disk for use in other tests
     {
-      name: 'createUserAndAuthenticate',
+      name: 'plugin-e2e-createUserAndAuthenticate',
       testDir: `${dirname(require.resolve('@grafana/plugin-e2e'))}/auth`,
       testMatch: [/.*\.js/],
       use: {
@@ -43,32 +44,39 @@ export default defineConfig<PluginOptions>({
     },
     // Run all tests in parallel using user with admin role
     {
-      name: 'admin',
+      name: 'plugin-e2e-admin',
       testDir: path.join(testDirRoot, '/plugin-e2e-api-tests/as-admin-user'),
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/admin.json',
       },
-      dependencies: ['authenticate'],
+      dependencies: ['plugin-e2e-authenticate'],
     },
     // Run all tests in parallel using user with viewer role
     {
-      name: 'viewer',
+      name: 'plugin-e2e-viewer',
       testDir: path.join(testDirRoot, '/plugin-e2e-api-tests/as-viewer-user'),
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/viewer.json',
       },
-      dependencies: ['createUserAndAuthenticate'],
+      dependencies: ['plugin-e2e-createUserAndAuthenticate'],
     },
     {
-      name: 'mysql',
+      name: 'plugin-e2e-mysql',
       testDir: path.join(testDirRoot, '/mysql'),
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/admin.json',
       },
-      dependencies: ['authenticate'],
+      dependencies: ['plugin-e2e-authenticate'],
+    },
+    {
+      name: 'e2e-authentication',
+      testDir: path.join(e2eDirRoot, '/authentication'),
+      use: {
+        ...devices['Desktop Chrome'],
+      },
     },
   ],
 });
