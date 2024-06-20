@@ -8,6 +8,7 @@ import (
 	"github.com/grafana/grafana/pkg/infra/tracing"
 	"github.com/grafana/grafana/pkg/modules"
 	"github.com/grafana/grafana/pkg/registry"
+	"github.com/grafana/grafana/pkg/services/authz"
 	"github.com/grafana/grafana/pkg/services/featuremgmt"
 	"github.com/grafana/grafana/pkg/services/grpcserver"
 	"github.com/grafana/grafana/pkg/services/grpcserver/interceptors"
@@ -19,6 +20,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc/health/grpc_health_v1"
 )
+
+const EntityStoreServerAudience = "entityStoreServer"
 
 var (
 	_ Service                    = (*service)(nil)
@@ -72,7 +75,10 @@ func ProvideService(
 		return nil, err
 	}
 
-	authn := &grpc.Authenticator{}
+	authn, err := grpc.ProvideAuthenticator(cfg, EntityStoreServerAudience)
+	if err != nil {
+		return nil, err
+	}
 
 	s := &service{
 		config:        newConfig(cfg),
@@ -116,7 +122,12 @@ func (s *service) start(ctx context.Context) error {
 		return err
 	}
 
-	store, err := sqlstash.ProvideSQLEntityServer(eDB, s.tracing)
+	authzClient, err := authz.ProvideStandaloneAuthZClient(s.cfg, s.features, s.tracing)
+	if err != nil {
+		return err
+	}
+
+	store, err := sqlstash.ProvideSQLEntityServer(eDB, s.tracing, authzClient, s.cfg, s.features)
 	if err != nil {
 		return err
 	}
