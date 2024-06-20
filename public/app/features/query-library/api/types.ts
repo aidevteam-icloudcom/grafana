@@ -12,6 +12,7 @@ export type DataQuerySpec = {
     generateName: string;
     name?: string;
     creationTimestamp?: string;
+    annotations?: { [key: string]: string };
   };
   spec: {
     title: string;
@@ -24,3 +25,10 @@ export type DataQuerySpecResponse = {
   apiVersion: string;
   items: DataQuerySpec[];
 };
+
+export type User = {
+  userId?: number;
+  login?: string;
+};
+
+export const CREATED_BY_KEY = 'grafana.app/createdBy';
