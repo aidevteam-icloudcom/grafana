@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/benbjohnson/clock"
@@ -15,6 +17,7 @@ import (
 	"github.com/grafana/grafana/pkg/components/simplejson"
 	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/infra/tracing"
+	"github.com/grafana/grafana/pkg/services/ngalert/accesscontrol"
 	"github.com/grafana/grafana/pkg/services/ngalert/client"
 	"github.com/grafana/grafana/pkg/services/ngalert/eval"
 	"github.com/grafana/grafana/pkg/services/ngalert/metrics"
@@ -54,15 +57,19 @@ type RemoteLokiBackend struct {
 	clock          clock.Clock
 	metrics        *metrics.Historian
 	log            log.Logger
+	ac             AccessControl
+	ruleStore      RuleStore
 }
 
-func NewRemoteLokiBackend(logger log.Logger, cfg LokiConfig, req client.Requester, metrics *metrics.Historian, tracer tracing.Tracer) *RemoteLokiBackend {
+func NewRemoteLokiBackend(logger log.Logger, cfg LokiConfig, req client.Requester, metrics *metrics.Historian, tracer tracing.Tracer, ruleStore RuleStore, ac AccessControl) *RemoteLokiBackend {
 	return &RemoteLokiBackend{
 		client:         NewLokiClient(cfg, req, metrics, logger, tracer),
 		externalLabels: cfg.ExternalLabels,
 		clock:          clock.New(),
 		metrics:        metrics,
 		log:            logger,
+		ac:             ac,
+		ruleStore:      ruleStore,
 	}
 }
 
@@ -112,7 +119,12 @@ func (h *RemoteLokiBackend) Record(ctx context.Context, rule history_model.RuleM
 
 // Query retrieves state history entries from an external Loki instance and formats the results into a dataframe.
 func (h *RemoteLokiBackend) Query(ctx context.Context, query models.HistoryQuery) (*data.Frame, error) {
-	logQL, err := BuildLogQuery(query)
+	uids, err := h.getFolderUIDsForFilter(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	logQL, err := BuildLogQuery(query, uids)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +142,7 @@ func (h *RemoteLokiBackend) Query(ctx context.Context, query models.HistoryQuery
 	if err != nil {
 		return nil, err
 	}
-	return merge(res, query.RuleUID)
+	return merge(res)
 }
 
 func buildSelectors(query models.HistoryQuery) ([]Selector, error) {
@@ -155,7 +167,7 @@ func buildSelectors(query models.HistoryQuery) ([]Selector, error) {
 }
 
 // merge will put all the results in one array sorted by timestamp.
-func merge(res QueryRes, ruleUID string) (*data.Frame, error) {
+func merge(res QueryRes) (*data.Frame, error) {
 	// Find the total number of elements in all arrays.
 	totalLen := 0
 	for _, arr := range res.Data.Result {
@@ -344,7 +356,7 @@ func NewSelector(label, op, value string) (Selector, error) {
 	return Selector{Label: label, Op: Operator(op), Value: value}, nil
 }
 
-func selectorString(selectors []Selector) string {
+func selectorString(selectors []Selector, namespaces []string) string {
 	if len(selectors) == 0 {
 		return "{}"
 	}
@@ -353,8 +365,23 @@ func selectorString(selectors []Selector) string {
 	for _, s := range selectors {
 		query += fmt.Sprintf("%s%s%q,", s.Label, s.Op, s.Value)
 	}
-	// Remove the last comma, as we append one to every selector.
-	query = query[:len(query)-1]
+
+	if len(namespaces) > 0 {
+		b := strings.Builder{}
+		b.Grow(len(namespaces)*40 + len(FolderUIDLabel)) // rough estimate of the length
+		b.WriteString(FolderUIDLabel)
+		b.WriteString("~=`")
+		b.WriteString(regexp.QuoteMeta(namespaces[0]))
+		for _, uid := range namespaces[1:] {
+			b.WriteString("|")
+			b.WriteString(regexp.QuoteMeta(uid))
+		}
+		b.WriteString("`")
+		query += b.String()
+	} else {
+		// Remove the last comma, as we append one to every selector.
+		query = query[:len(query)-1]
+	}
 	return "{" + query + "}"
 }
 
@@ -366,13 +393,13 @@ func isValidOperator(op string) bool {
 	return false
 }
 
-func BuildLogQuery(query models.HistoryQuery) (string, error) {
+func BuildLogQuery(query models.HistoryQuery, namespaces []string) (string, error) {
 	selectors, err := buildSelectors(query)
 	if err != nil {
 		return "", fmt.Errorf("failed to build the provided selectors: %w", err)
 	}
 
-	logQL := selectorString(selectors)
+	logQL := selectorString(selectors, namespaces)
 
 	if queryHasLogFilters(query) {
 		logQL = fmt.Sprintf("%s | json", logQL)
@@ -408,4 +435,49 @@ func queryHasLogFilters(query models.HistoryQuery) bool {
 		query.DashboardUID != "" ||
 		query.PanelID != 0 ||
 		len(query.Labels) > 0
+}
+
+func (h *RemoteLokiBackend) getFolderUIDsForFilter(ctx context.Context, query models.HistoryQuery) ([]string, error) {
+	bypass, err := h.ac.CanReadAllRules(ctx, query.SignedInUser)
+	if err != nil {
+		return nil, err
+	}
+	if bypass { // if user has access to all rules and folder, remove filter
+		return nil, nil
+	}
+	// now if there is a filter by rule UID, find that rule UID and make sure that user has access to it.
+	if query.RuleUID != "" {
+		rule, err := h.ruleStore.GetAlertRuleByUID(ctx, &models.GetAlertRuleByUIDQuery{
+			UID:   query.RuleUID,
+			OrgID: query.OrgID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch alert rule by UID: %w", err)
+		}
+		if rule == nil {
+			return nil, models.ErrAlertRuleNotFound
+		}
+		return nil, h.ac.AuthorizeAccessInFolder(ctx, query.SignedInUser, rule)
+	}
+	// now get all namespaces user has access to
+	folders, err := h.ruleStore.GetUserVisibleNamespaces(ctx, query.OrgID, query.SignedInUser)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch folders that user can access: %w", err)
+	}
+	uids := make([]string, 0, len(folders))
+	// now keep only UIDs of folder in which user can read rules.
+	for _, f := range folders {
+		hasAccess, err := h.ac.HasAccessInFolder(ctx, query.SignedInUser, models.Namespace(*f))
+		if err != nil {
+			return nil, err
+		}
+		if !hasAccess {
+			continue
+		}
+		uids = append(uids, f.UID)
+	}
+	if len(uids) == 0 {
+		return nil, accesscontrol.NewAuthorizationErrorGeneric("read rules in any folder")
+	}
+	return uids, nil
 }
