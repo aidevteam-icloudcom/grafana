@@ -7,24 +7,46 @@ import (
 const (
 	metricsSubSystem = "queryservice"
 	metricsNamespace = "grafana"
+
+	compareResultError     = "error"
+	compareResultEqual     = "equal"
+	compareResultDifferent = "different"
+
+	compareLabelResult         = "result"
+	compareLabelDatasourceType = "datasource_type"
 )
 
-type queryMetrics struct {
-	dsRequests *prometheus.CounterVec
+type metrics struct {
+	dsRequests        *prometheus.CounterVec
+	dsCompare         *prometheus.CounterVec
+	queryDurationDiff *prometheus.HistogramVec
 
 	// older metric
 	expressionsQuerySummary *prometheus.SummaryVec
 }
 
-func newQueryMetrics(reg prometheus.Registerer) *queryMetrics {
-	m := &queryMetrics{
+func newQueryMetrics(reg prometheus.Registerer) *metrics {
+	m := &metrics{
 		dsRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: metricsNamespace,
 			Subsystem: metricsSubSystem,
 			Name:      "ds_queries_total",
 			Help:      "Number of datasource queries made from the query service",
 		}, []string{"error", "dataplane", "datasource_type"}),
-
+		dsCompare: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: metricsNamespace,
+			Subsystem: metricsSubSystem,
+			Name:      "ds_compare_results_total",
+			Help:      "Comparison results in passive mode from the query service",
+		}, []string{compareLabelResult, compareLabelDatasourceType}),
+		queryDurationDiff: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "query_duration_difference_seconds",
+				Help:    "Difference in duration between single and multi-tenant queries in seconds",
+				Buckets: prometheus.DefBuckets,
+			},
+			[]string{"datasource_type"},
+		),
 		expressionsQuerySummary: prometheus.NewSummaryVec(
 			prometheus.SummaryOpts{
 				Namespace:  metricsNamespace,
@@ -40,6 +62,8 @@ func newQueryMetrics(reg prometheus.Registerer) *queryMetrics {
 	if reg != nil {
 		reg.MustRegister(
 			m.dsRequests,
+			m.dsCompare,
+			m.queryDurationDiff,
 			m.expressionsQuerySummary,
 		)
 	}

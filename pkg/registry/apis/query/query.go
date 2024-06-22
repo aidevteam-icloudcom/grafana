@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/grafana/grafana-plugin-sdk-go/experimental/apis/data/v0alpha1"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/sync/errgroup"
@@ -193,15 +196,69 @@ func (b *QueryAPIBuilder) handleQuerySingleDatasource(ctx context.Context, req d
 	}
 
 	// Add user headers... here or in client.QueryData
+	pluginID := req.PluginId
+	pluginUID := req.UID
+	ctxLogger := b.log.New("datasource", pluginID, "dsUID", pluginUID).FromContext(ctx)
+	runComparison := b.peformComparison(req, ctxLogger)
+	var comparisonReq datasourceRequest
+	if runComparison {
+		comparisonReq = datasourceRequest{
+			PluginId: pluginID,
+			UID:      pluginUID,
+			Request: &v0alpha1.QueryDataRequest{
+				TimeRange: req.Request.TimeRange,
+				Queries:   req.Request.Queries,
+				Debug:     req.Request.Debug,
+			},
+			Headers: req.Headers, // TODO: fix this - this currently isn't used
+		}
+	}
+
+	var err error
+	ctx, err = b.client.PreprocessRequest(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	client, err := b.client.GetDataSourceClient(ctx, v0alpha1.DataSourceRef{
-		Type: req.PluginId,
-		UID:  req.UID,
+		Type: pluginID,
+		UID:  pluginUID,
 	})
 	if err != nil {
 		return nil, err
 	}
 
+	res := b.peformQuery(ctx, client, req, pluginID, pluginUID)
+	// Create a response object with the error when missing (happens for client errors like 404)
+	if res.response == nil && res.err != nil {
+		res.response = &backend.QueryDataResponse{Responses: make(backend.Responses)}
+		for _, q := range req.Request.Queries {
+			res.response.Responses[q.RefID] = backend.DataResponse{
+				Status: backend.Status(res.code),
+				Error:  err,
+			}
+		}
+	}
+
+	if runComparison {
+		b.log.Debug("running passive mode comparison to multi-tenant")
+		go b.queryDataAndCompare(ctx, ctxLogger, pluginID, pluginUID, comparisonReq, res)
+	}
+
+	return res.response, res.err
+}
+
+type queryRes struct {
+	code        int
+	response    *backend.QueryDataResponse
+	elapsedTime time.Duration
+	err         error
+}
+
+func (b *QueryAPIBuilder) peformQuery(ctx context.Context, client v0alpha1.QueryDataClient, req datasourceRequest, pluginID, pluginUID string) queryRes {
+	startTime := time.Now()
 	code, rsp, err := client.QueryData(ctx, *req.Request)
+	elapsedTime := time.Since(startTime)
 	if err == nil && rsp != nil {
 		for _, q := range req.Request.Queries {
 			if q.ResultAssertions != nil {
@@ -218,17 +275,163 @@ func (b *QueryAPIBuilder) handleQuerySingleDatasource(ctx context.Context, req d
 		}
 	}
 
-	// Create a response object with the error when missing (happens for client errors like 404)
-	if rsp == nil && err != nil {
-		rsp = &backend.QueryDataResponse{Responses: make(backend.Responses)}
-		for _, q := range req.Request.Queries {
-			rsp.Responses[q.RefID] = backend.DataResponse{
-				Status: backend.Status(code),
-				Error:  err,
+	return queryRes{
+		code:        code,
+		response:    rsp,
+		elapsedTime: elapsedTime,
+		err:         err,
+	}
+}
+
+// peformComparison determines if a comparison check should be made
+func (b *QueryAPIBuilder) peformComparison(req datasourceRequest, ctxLogger log.Logger) bool {
+	// not in passive mode
+	if b.passiveModeClient == nil {
+		return false
+	}
+
+	// Only compare Loki & Prometheus requests. We do not want to compare all requests
+	// as some datasources have costs attached to queries.
+	if req.PluginId != datasources.DS_PROMETHEUS && req.PluginId != datasources.DS_LOKI {
+		return false
+	}
+
+	// do not compare relative requests - they will always be different since they
+	// are served at different times
+	_, err := strconv.ParseInt(req.Request.TimeRange.From, 10, 64)
+	_, err2 := strconv.ParseInt(req.Request.TimeRange.To, 10, 64)
+	if (err != nil) && (err2 != nil) {
+		ctxLogger.Debug("relative query - not running comparison")
+		return false
+	}
+
+	return true
+}
+
+// queryDataAndCompare runs the query again, this time from the MT service, and compares the results. All of this happens in a go routine and is non-blocking.
+func (b *QueryAPIBuilder) queryDataAndCompare(ctx context.Context, ctxLogger log.Logger, pluginID string, pluginUID string, req datasourceRequest, originalRes queryRes) {
+	client, err := (*b.passiveModeClient).GetDataSourceClient(ctx, v0alpha1.DataSourceRef{
+		Type: pluginID,
+		UID:  pluginUID,
+	})
+	if err != nil {
+		ctxLogger.Error("unable to query", "error", err)
+		return
+	}
+
+	// the original query will likely complete before this query. Do not use the same context so the query can complete.
+	res := b.peformQuery(context.Background(), client, req, pluginID, pluginUID)
+	if err != nil {
+		b.increaseCompare(compareResultError, pluginID)
+		ctxLogger.Error("unable to query", "error", err)
+		return
+	}
+
+	if res.code != originalRes.code {
+		b.increaseCompare(compareResultError, pluginID)
+		ctxLogger.Error("codes do not match", "got", res.code, "expected", originalRes.code)
+		return
+	}
+
+	if res.response.Responses != nil {
+		b.compareResults(ctxLogger, pluginID, originalRes.response, res.response)
+		// only compare duration if there is a response. Errors will usually be faster.
+		b.reportDurationDiff(pluginID, originalRes.elapsedTime, res.elapsedTime)
+	}
+}
+
+func (b *QueryAPIBuilder) compareResults(ctxLogger log.Logger, pluginID string, originalRes, newRes *backend.QueryDataResponse) bool {
+	// If the length of both responses is different, we know that
+	// something is not right and can straight up return.
+	if len(originalRes.Responses) != len(newRes.Responses) {
+		ctxLogger.Debug("response sizes are different", "expected", len(originalRes.Responses), "got", len(newRes.Responses))
+		b.increaseCompare(compareResultDifferent, pluginID)
+		return false
+	}
+	for k, v := range originalRes.Responses {
+		vv, exists := newRes.Responses[k]
+		if !exists {
+			ctxLogger.Debug("key missing", "expected", k, "got", nil)
+			b.increaseCompare(compareResultDifferent, pluginID)
+			return false
+		}
+		if v.Status.String() != vv.Status.String() {
+			ctxLogger.Debug("status different", "expected", v.Status, "got", vv.Status)
+			b.increaseCompare(compareResultDifferent, pluginID)
+			return false
+		}
+		if len(v.Frames) != len(vv.Frames) {
+			ctxLogger.Debug("frame length different", "expected", len(v.Frames), "got", len(vv.Frames))
+			b.increaseCompare(compareResultDifferent, pluginID)
+			return false
+		}
+		for i, frame := range v.Frames {
+			frame2 := vv.Frames[i]
+			if frame.RefID != frame2.RefID {
+				ctxLogger.Debug("refID different", "expected", frame.RefID, "got", frame2.RefID)
+				b.increaseCompare(compareResultDifferent, pluginID)
+				return false
+			}
+			if frame.Name != frame2.Name {
+				ctxLogger.Debug("frame name different", "expected", frame.Name, "got", frame2.Name)
+				b.increaseCompare(compareResultDifferent, pluginID)
+				return false
+			}
+			if len(frame.Fields) != len(frame2.Fields) {
+				ctxLogger.Debug("field length different", "expected", len(frame.Fields), "got", len(frame2.Fields))
+				b.increaseCompare(compareResultDifferent, pluginID)
+				return false
+			}
+
+			sort.Sort(byName(frame.Fields))
+			sort.Sort(byName(frame2.Fields))
+			for i, field := range frame.Fields {
+				field2 := frame2.Fields[i]
+				if field.Name != field2.Name {
+					ctxLogger.Debug("field name different", "expected", field.Name, "got", field2.Name)
+					b.increaseCompare(compareResultDifferent, pluginID)
+					return false
+				}
+				if !field.Labels.Equals(field2.Labels) {
+					ctxLogger.Debug("field labels different", "expected", field.Labels, "got", field2.Labels)
+					b.increaseCompare(compareResultDifferent, pluginID)
+					return false
+				}
+				if field.Type().String() != field2.Type().String() {
+					ctxLogger.Debug("field type different", "expected", field.Type().String(), "got", field2.Type().String())
+					b.increaseCompare(compareResultDifferent, pluginID)
+					return false
+				}
+				if field.Len() != field2.Len() {
+					ctxLogger.Debug("field length different", "expected", field.Len(), "got", field2.Len())
+					b.increaseCompare(compareResultDifferent, pluginID)
+					return false
+				}
+				// This will give a first good impression - comparing the content of the field / real values
+				// might be tricky as we don't know the type and how to compare them.
 			}
 		}
 	}
-	return rsp, err
+	b.increaseCompare(compareResultEqual, pluginID)
+	return true
+}
+
+type byName []*data.Field
+
+func (a byName) Len() int           { return len(a) }
+func (a byName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a byName) Less(i, j int) bool { return a[i].Name < a[j].Name }
+
+func (b *QueryAPIBuilder) increaseCompare(result, dsType string) {
+	b.metrics.dsCompare.With(prometheus.Labels{
+		compareLabelResult:         result,
+		compareLabelDatasourceType: dsType,
+	}).Add(1)
+}
+
+func (b *QueryAPIBuilder) reportDurationDiff(dsType string, stDuration, mtDuration time.Duration) {
+	durationDifference := mtDuration - stDuration
+	b.metrics.queryDurationDiff.With(prometheus.Labels{compareLabelDatasourceType: dsType}).Observe(durationDifference.Seconds())
 }
 
 // buildErrorResponses applies the provided error to each query response in the list. These queries should all belong to the same datasource.
