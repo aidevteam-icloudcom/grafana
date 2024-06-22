@@ -163,6 +163,12 @@ describe('NavToolbarActions', () => {
       const newShareButton = screen.getByTestId(selectors.pages.Dashboard.DashNav.newShareButton.container);
       expect(newShareButton).toBeInTheDocument();
     });
+    it('Should show new export button when newDashboardSharingComponent FF is enabled', async () => {
+      config.featureToggles.newDashboardSharingComponent = true;
+      setup();
+      const newExportButton = screen.getByTestId(selectors.pages.Dashboard.DashNav.NewExportButton.container);
+      expect(newExportButton).toBeInTheDocument();
+    });
   });
 
   describe('Snapshot', () => {
