@@ -11,6 +11,7 @@ import (
 
 	"github.com/grafana/grafana/pkg/infra/db"
 	"github.com/grafana/grafana/pkg/infra/tracing"
+	"github.com/grafana/grafana/pkg/plugins"
 	"github.com/grafana/grafana/pkg/services/accesscontrol"
 	"github.com/grafana/grafana/pkg/services/dashboards"
 	"github.com/grafana/grafana/pkg/services/featuremgmt"
@@ -781,7 +782,7 @@ func TestStore_StoreActionSet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
-			asService := NewActionSetService()
+			asService := NewActionSetService(featuremgmt.WithFeatures())
 			asService.StoreActionSet(tt.resource, tt.action, tt.actions)
 
 			actionSetName := GetActionSetName(tt.resource, tt.action)
@@ -791,8 +792,97 @@ func TestStore_StoreActionSet(t *testing.T) {
 	}
 }
 
+func TestStore_DeclareActionSet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	type actionSetTest struct {
+		desc              string
+		pluginID          string
+		pluginName        string
+		actionsets        []plugins.ActionSetRegistration
+		expectedErr       error
+		expectedActionSet struct {
+			action  string
+			actions []string
+		}
+	}
+
+	pluginID := "k6testid"
+	tests := []actionSetTest{
+		{
+			desc:       "should not be able to declare action set without prefix for action",
+			pluginID:   pluginID,
+			pluginName: "k6testname",
+			actionsets: []plugins.ActionSetRegistration{{
+				ActionSet: plugins.ActionSet{
+					Action:  "wrongprefix:k6-app:edit",
+					Actions: []string{"folders:read", "folders:write"},
+				},
+			},
+			},
+			expectedErr: &accesscontrol.ErrorActionPrefixMissing{},
+		},
+		{
+			desc:       "should not be able to declare action set outside of allowlist",
+			pluginID:   pluginID,
+			pluginName: "k6testname",
+			actionsets: []plugins.ActionSetRegistration{{
+				ActionSet: plugins.ActionSet{
+					Action:  pluginID + ":k6-app:edit",
+					Actions: []string{"folders:read", "folders:write"},
+				},
+			},
+			},
+			expectedErr: &accesscontrol.ErrorActionNotAllowed{},
+		},
+		{
+			desc:       "should be able to declare action set to extend existing action set",
+			pluginID:   pluginID,
+			pluginName: "k6testname",
+			actionsets: []plugins.ActionSetRegistration{
+				{
+					ActionSet: plugins.ActionSet{
+						Action:  pluginID + ":folders:view",
+						Actions: []string{"k6tests:read"},
+					},
+				},
+			},
+			expectedActionSet: struct {
+				action  string
+				actions []string
+			}{
+				action:  "folders:view",
+				actions: []string{"folders:read", "k6tests:read"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			asService := NewActionSetService(featuremgmt.WithFeatures(featuremgmt.FlagAccessControlOnCall, featuremgmt.FlagAccessActionSets))
+			// first register the folders:view actions
+			// mimiking pre seeded actionsets
+			asService.StoreActionSet("folders", "view", []string{"folders:read"})
+
+			err := asService.DeclareActionSets(context.TODO(), tt.pluginID, tt.pluginID, tt.actionsets)
+			if tt.expectedErr != nil {
+				require.IsType(t, tt.expectedErr, err)
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			if tt.expectedActionSet.action != "" {
+				actionSet := asService.ResolveActionSet(tt.expectedActionSet.action)
+				require.ElementsMatch(t, tt.expectedActionSet.actions, actionSet)
+			}
+		})
+	}
+}
+
 func TestStore_ResolveActionSet(t *testing.T) {
-	actionSetService := NewActionSetService()
+	actionSetService := NewActionSetService(featuremgmt.WithFeatures())
 	actionSetService.StoreActionSet("folders", "edit", []string{"folders:read", "folders:write", "dashboards:read", "dashboards:write"})
 	actionSetService.StoreActionSet("folders", "view", []string{"folders:read", "dashboards:read"})
 	actionSetService.StoreActionSet("dashboards", "view", []string{"dashboards:read"})
@@ -835,7 +925,7 @@ func TestStore_ResolveActionSet(t *testing.T) {
 }
 
 func TestStore_ExpandActions(t *testing.T) {
-	actionSetService := NewActionSetService()
+	actionSetService := NewActionSetService(featuremgmt.WithFeatures())
 	actionSetService.StoreActionSet("folders", "edit", []string{"folders:read", "folders:write", "dashboards:read", "dashboards:write"})
 	actionSetService.StoreActionSet("folders", "view", []string{"folders:read", "dashboards:read"})
 	actionSetService.StoreActionSet("dashboards", "view", []string{"dashboards:read"})
