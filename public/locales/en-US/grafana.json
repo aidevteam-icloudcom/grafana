@@ -567,7 +567,6 @@
       "edit-comment-tooltip": "Edit comment",
       "optional-description": "An optional description of what the query does.",
       "query-comment-label": "Query comment",
-      "query-template-added": "Query template successfully added to the library",
       "query-text-label": "Query text",
       "save-comment": "Save comment",
       "star-query-tooltip": "Star query",
@@ -638,6 +637,10 @@
     "rich-history-utils-notification": {
       "saving-failed": "Saving rich history failed",
       "update-failed": "Rich History update failed"
+    },
+    "query-library": {
+      "query-template-added": "Query template successfully added to the library",
+      "query-template-error": "Error attempting to add this query to the library"
     },
     "run-query": {
       "left-pane": "Left pane",
@@ -1578,7 +1581,8 @@
       "hide-response": "Hide response",
       "remove-query": "Remove query",
       "show-response": "Show response",
-      "toggle-edit-mode": "Toggle text edit mode"
+      "toggle-edit-mode": "Toggle text edit mode",
+      "save-to-query-library": "Save to query library"
     },
     "query-editor-not-exported": "Data source plugin does not export any Query Editor component"
   },
