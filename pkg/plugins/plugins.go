@@ -99,6 +99,7 @@ type JSONData struct {
 	Preload      bool         `json:"preload"`
 	Backend      bool         `json:"backend"`
 	Routes       []*Route     `json:"routes"`
+	Extensions   []Extension `json:"extensions"`
 
 	// AccessControl settings
 	Roles []RoleRegistration `json:"roles,omitempty"`
@@ -163,6 +164,10 @@ func ReadPluginJSON(reader io.Reader) (JSONData, error) {
 		if len(plugin.AliasIDs) > 0 {
 			return plugin, ErrUnsupportedAlias
 		}
+	}
+
+	if len(plugin.Extensions) == 0 {
+		plugin.Extensions = []Extension{}
 	}
 
 	if len(plugin.Dependencies.Plugins) == 0 {
