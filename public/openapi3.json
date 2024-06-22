@@ -25793,7 +25793,7 @@
         ],
         "responses": {
           "204": {
-            "$ref": "#/components/responses/okResponse"
+            "description": " The provider settings was deleted successfully."
           },
           "400": {
             "$ref": "#/components/responses/badRequestError"
@@ -25889,7 +25889,7 @@
         },
         "responses": {
           "204": {
-            "$ref": "#/components/responses/okResponse"
+            "description": " The provider settings was updated successfully."
           },
           "400": {
             "$ref": "#/components/responses/badRequestError"
