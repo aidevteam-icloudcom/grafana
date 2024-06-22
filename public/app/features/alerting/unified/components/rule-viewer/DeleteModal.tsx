@@ -1,17 +1,19 @@
 import React, { useState, useCallback, useMemo } from 'react';
 
+import { locationService } from '@grafana/runtime';
 import { ConfirmModal } from '@grafana/ui';
 import { dispatch } from 'app/store/store';
 import { CombinedRule } from 'app/types/unified-alerting';
 
-import { deleteRuleAction } from '../../state/actions';
-import { getRulesSourceName } from '../../utils/datasource';
-import { fromRulerRule } from '../../utils/rule-id';
+import { useDeleteRuleFromGroup } from '../../hooks/useProduceNewRuleGroup';
+import { fetchPromAndRulerRulesAction } from '../../state/actions';
+import { getRuleGroupLocationFromCombinedRule } from '../../utils/rules';
 
 type DeleteModalHook = [JSX.Element, (rule: CombinedRule) => void, () => void];
 
 export const useDeleteModal = (): DeleteModalHook => {
   const [ruleToDelete, setRuleToDelete] = useState<CombinedRule | undefined>();
+  const [deleteRuleFromGroup, _deleteState] = useDeleteRuleFromGroup();
 
   const dismissModal = useCallback(() => {
     setRuleToDelete(undefined);
@@ -22,20 +24,24 @@ export const useDeleteModal = (): DeleteModalHook => {
   }, []);
 
   const deleteRule = useCallback(
-    (ruleToDelete?: CombinedRule) => {
-      if (ruleToDelete && ruleToDelete.rulerRule) {
-        const identifier = fromRulerRule(
-          getRulesSourceName(ruleToDelete.namespace.rulesSource),
-          ruleToDelete.namespace.name,
-          ruleToDelete.group.name,
-          ruleToDelete.rulerRule
-        );
-
-        dispatch(deleteRuleAction(identifier, { navigateTo: '/alerting/list' }));
-        dismissModal();
+    async (rule?: CombinedRule) => {
+      if (!rule?.rulerRule) {
+        return;
       }
+
+      const location = getRuleGroupLocationFromCombinedRule(rule);
+      await deleteRuleFromGroup(location, rule.rulerRule);
+
+      // refetch rules for this rules source
+      // @TODO remove this when we moved everything to RTKQ – then the endpoint will simply invalidate the tags
+      dispatch(fetchPromAndRulerRulesAction({ rulesSourceName: location.dataSourceName }));
+
+      dismissModal();
+
+      // @TODO implement redirect yes / no
+      locationService.replace('/alerting/list');
     },
-    [dismissModal]
+    [deleteRuleFromGroup, dismissModal]
   );
 
   const modal = useMemo(
