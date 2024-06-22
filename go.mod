@@ -465,6 +465,8 @@ require (
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
 )
 
+require github.com/quasilyte/go-ruleguard/dsl v0.3.22
+
 // Use fork of crewjam/saml with fixes for some issues until changes get merged into upstream
 replace github.com/crewjam/saml => github.com/grafana/saml v0.4.15-0.20240523142256-cc370b98af7c
 
