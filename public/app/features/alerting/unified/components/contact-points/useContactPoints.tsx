@@ -1,16 +1,19 @@
-/**
- * This hook will combine data from both the Alertmanager config
- * and (if available) it will also fetch the status from the Grafana Managed status endpoint
- */
-
-import { produce } from 'immer';
-import { remove } from 'lodash';
+import { useCallback } from 'react';
 
 import { alertmanagerApi } from '../../api/alertmanagerApi';
 import { onCallApi, OnCallIntegrationDTO } from '../../api/onCallApi';
 import { usePluginBridge } from '../../hooks/usePluginBridge';
+import { useProduceNewAlertmanagerConfiguration } from '../../hooks/useProduceNewAlertmanagerConfig';
+import {
+  addReceiverAction,
+  deleteReceiverAction,
+  updateReceiverAction,
+} from '../../reducers/alertmanagerConfiguration/receivers';
 import { useAlertmanager } from '../../state/AlertmanagerContext';
 import { SupportedPlugin } from '../../types/pluginBridges';
+import { CloudChannelValues, ReceiverFormValues } from '../../types/receiver-form';
+import { formValuesToCloudReceiver } from '../../utils/receiver-form';
+import { defaultChannelValues } from '../receivers/form/CloudReceiverForm';
 
 import { enhanceContactPointsWithMetadata } from './utils';
 
@@ -140,31 +143,32 @@ export function useContactPointsWithStatus({
   };
 }
 
-export function useDeleteContactPoint(selectedAlertmanager: string) {
-  const [fetchAlertmanagerConfig] = alertmanagerApi.endpoints.getAlertmanagerConfiguration.useLazyQuery();
-  const [updateAlertManager, updateAlertmanagerState] =
-    alertmanagerApi.endpoints.updateAlertmanagerConfiguration.useMutation();
+export function useDeleteContactPoint() {
+  const [produceNewConfig, updateState] = useProduceNewAlertmanagerConfiguration();
 
-  const deleteTrigger = (contactPointName: string) => {
-    return fetchAlertmanagerConfig(selectedAlertmanager).then(({ data }) => {
-      if (!data) {
-        return;
-      }
+  const deleteFn = useCallback(
+    async (contactPointName: string) => {
+      const action = deleteReceiverAction(contactPointName);
+      await produceNewConfig(action);
+    },
+    [produceNewConfig]
+  );
 
-      const newConfig = produce(data, (draft) => {
-        remove(draft?.alertmanager_config?.receivers ?? [], (receiver) => receiver.name === contactPointName);
-        return draft;
-      });
+  return [deleteFn, updateState] as const;
+}
 
-      return updateAlertManager({
-        selectedAlertmanager,
-        config: newConfig,
-      }).unwrap();
-    });
+export function useUpsertCloudContactPoint() {
+  const [produceNewAlertmanagerConfiguration, updateState] = useProduceNewAlertmanagerConfiguration();
+
+  const upsertFn = async (formValues: ReceiverFormValues<CloudChannelValues>, existingReceiverName?: string) => {
+    const newReceiver = formValuesToCloudReceiver(formValues, defaultChannelValues);
+
+    const action = existingReceiverName
+      ? updateReceiverAction({ name: existingReceiverName, receiver: newReceiver })
+      : addReceiverAction(newReceiver);
+
+    await produceNewAlertmanagerConfiguration(action);
   };
 
-  return {
-    deleteTrigger,
-    updateAlertmanagerState,
-  };
+  return [upsertFn, updateState] as const;
 }
