@@ -1,4 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useHistory, useLocation } from 'react-router-dom';
 import {
   useAbsoluteLayout,
   useExpanded,
@@ -58,7 +59,11 @@ export const Table = memo((props: Props) => {
     enableSharedCrosshair = false,
     initialRowIndex = undefined,
     fieldConfig,
+    uid,
   } = props;
+
+  const history = useHistory();
+  const location = useLocation();
 
   const listRef = useRef<VariableSizeList>(null);
   const tableDivRef = useRef<HTMLDivElement>(null);
@@ -247,6 +252,17 @@ export const Table = memo((props: Props) => {
     setPageSize(pageSize);
   }, [pageSize, setPageSize]);
 
+  // Set page based on useLocation() hook for current table uid
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tablePage = params.get(`table${uid}Page`);
+    if (tablePage) {
+      const pageNumber = Number(tablePage) - 1;
+      gotoPage(pageNumber);
+    }
+  }, [location, uid, gotoPage]);
+
+  // TODO update how reset occurs so it does not bypass persistance
   useEffect(() => {
     // Reset page index when data changes
     // This is needed because react-table does not do this automatically
@@ -264,8 +280,12 @@ export const Table = memo((props: Props) => {
   const onNavigate = useCallback(
     (toPage: number) => {
       gotoPage(toPage - 1);
+      // Update history based on page change
+      const currentParams = new URLSearchParams(location.search);
+      currentParams.set(`table${uid}Page`, `${toPage.toString()}`);
+      history.replace({ pathname: location.pathname, search: currentParams.toString() });
     },
-    [gotoPage]
+    [gotoPage, history, location, uid]
   );
 
   const itemCount = enablePagination ? page.length : rows.length;
