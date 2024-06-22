@@ -9,7 +9,7 @@ import {
   StandardEditorsRegistryItem,
   TransformerCategory,
 } from '@grafana/data';
-import { InlineField, InlineFieldRow, Select, InlineSwitch } from '@grafana/ui';
+import { InlineField, InlineFieldRow, Select, InlineSwitch, Input } from '@grafana/ui';
 import { FieldNamePicker } from '@grafana/ui/src/components/MatchersUI/FieldNamePicker';
 
 import { getTransformationContent } from '../docs/getTransformationContent';
@@ -30,6 +30,7 @@ const fieldNamePickerSettings: StandardEditorsRegistryItem<string, FieldNamePick
 };
 
 export const extractFieldsTransformerEditor = ({
+  index,
   input,
   options,
   onChange,
@@ -38,6 +39,7 @@ export const extractFieldsTransformerEditor = ({
     onChange({
       ...options,
       source,
+      transformationIndex: index,
     });
   };
 
@@ -53,6 +55,11 @@ export const extractFieldsTransformerEditor = ({
       ...options,
       jsonPaths,
     });
+  };
+
+  const onRegexExpressionChange = (event: React.SyntheticEvent<HTMLInputElement>) => {
+    const expression = event.currentTarget.value;
+    onChange({ ...options, expression });
   };
 
   const onToggleReplace = () => {
@@ -99,6 +106,17 @@ export const extractFieldsTransformerEditor = ({
         </InlineField>
       </InlineFieldRow>
       {options.format === 'json' && <JSONPathEditor options={options.jsonPaths ?? []} onChange={onJSONPathsChange} />}
+      {options.format === 'regex' && (
+        <InlineField label={'Expression'} labelWidth={16}>
+          <Input
+            label="Expression"
+            type="text"
+            value={options.expression}
+            width={40}
+            onChange={onRegexExpressionChange}
+          />
+        </InlineField>
+      )}
       <InlineFieldRow>
         <InlineField label={'Replace all fields'} labelWidth={16}>
           <InlineSwitch value={options.replace ?? false} onChange={onToggleReplace} />

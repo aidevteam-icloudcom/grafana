@@ -3,7 +3,7 @@ import { Registry, RegistryItem } from '@grafana/data';
 import { FieldExtractorID } from './types';
 
 export interface FieldExtractor extends RegistryItem {
-  parse: (v: string) => Record<string, any> | undefined;
+  parse: (v: string, exp?: string, source?: string, transformationIndex?: number) => Record<string, any> | undefined;
 }
 
 const extJSON: FieldExtractor = {
@@ -110,14 +110,64 @@ const extLabels: FieldExtractor = {
   parse: parseKeyValuePairs,
 };
 
-const fmts = [extJSON, extLabels];
+const extRegex: FieldExtractor = {
+  id: FieldExtractorID.Regex,
+  name: 'Regex',
+  description: 'Parse with Regex',
+  parse: (v: string, exp?: string, source?: string, transformationIndex?: number) => {
+    if (exp) {
+      try {
+        const re = new RegExp(exp, 'gi');
+        const matches = Array.from(v.matchAll(re));
+
+        // move group matches to an easier to deal with structure
+        const matchGroups: { [key: string]: string[] } = {};
+        matches.forEach((match, matchIdx) => {
+          const group = match.groups;
+          if (group) {
+            const groupKeys = Object.keys(group);
+            groupKeys.forEach((groupKey) => {
+              if (group[groupKey] !== undefined) {
+                if (matchGroups[groupKey] === undefined) {
+                  matchGroups[groupKey] = [group[groupKey]];
+                } else {
+                  matchGroups[groupKey].push(group[groupKey]);
+                }
+              }
+            });
+          } else {
+            const matchIndex = `${source}-${transformationIndex}-${matchIdx}`;
+            matchGroups[matchIndex] = [match[0]];
+          }
+        });
+
+        const fields: { [key: string]: string } = {};
+        Object.keys(matchGroups).forEach((key) => {
+          matchGroups[key].forEach((value, i) => {
+            // 0 should count as blank, every higher index is - 1
+            const index = matchGroups[key].length > 1 && i !== 0 ? `${key}-${i - 1}` : key;
+            fields[index] = value;
+          });
+        });
+        return fields;
+      } catch {
+        return undefined;
+      }
+    } else {
+      return undefined;
+    }
+  },
+};
+
+const fmts = [extJSON, extLabels, extRegex];
+const autoFormats = [extJSON, extLabels]; // regular expression cannot be parsed automatically
 
 const extAuto: FieldExtractor = {
   id: FieldExtractorID.Auto,
   name: 'Auto',
   description: 'parse new fields automatically',
   parse: (v: string) => {
-    for (const f of fmts) {
+    for (const f of autoFormats) {
       try {
         const r = f.parse(v);
         if (r != null) {
