@@ -19,7 +19,7 @@ require (
 	cloud.google.com/go/kms v1.15.7 // @grafana/grafana-backend-group
 	cloud.google.com/go/storage v1.38.0 // @grafana/grafana-backend-group
 	cuelang.org/go v0.6.0-0.dev // @grafana/grafana-as-code
-	filippo.io/age v1.1.1 // @grafana/identity-access-team
+	filippo.io/age v1.2.0 // @grafana/identity-access-team
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible // @grafana/partner-datasources
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.5.2 // @grafana/grafana-backend-group
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azkeys v0.9.0 // @grafana/grafana-backend-group
@@ -299,7 +299,7 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
-	github.com/grafana/grafana/pkg/storage/unified/resource v0.0.0-20240620152449-c88de7f4d073 // @grafana/grafana-search-and-storage
+	github.com/grafana/grafana/pkg/storage/unified/resource v0.0.0-20240622112051-c0641a0ca62f // @grafana/grafana-search-and-storage
 	github.com/grafana/regexp v0.0.0-20221123153739-15dc172cd2db // indirect
 	github.com/grafana/sqlds/v3 v3.2.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.1-0.20191002090509-6af20e3a5340 // indirect; @grafana/plugins-platform-backend
