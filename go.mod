@@ -153,7 +153,7 @@ require (
 	github.com/wk8/go-ordered-map v1.0.0 // @grafana/grafana-backend-group
 	github.com/xlab/treeprint v1.2.0 // @grafana/observability-traces-and-profiling
 	github.com/yudai/gojsondiff v1.0.0 // @grafana/grafana-backend-group
-	go.opentelemetry.io/collector/pdata v1.6.0 // @grafana/grafana-backend-group
+	go.opentelemetry.io/collector/pdata v1.10.0 // @grafana/grafana-backend-group
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.51.0 // @grafana/plugins-platform-backend
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.51.0 // @grafana/grafana-operator-experience-squad
 	go.opentelemetry.io/contrib/propagators/jaeger v1.26.0 // @grafana/grafana-backend-group
@@ -179,7 +179,7 @@ require (
 	gonum.org/v1/gonum v0.12.0 // @grafana/observability-metrics
 	google.golang.org/api v0.176.0 // @grafana/grafana-backend-group
 	google.golang.org/grpc v1.64.0 // @grafana/plugins-platform-backend
-	google.golang.org/protobuf v1.34.1 // @grafana/plugins-platform-backend
+	google.golang.org/protobuf v1.34.2 // @grafana/plugins-platform-backend
 	gopkg.in/ini.v1 v1.67.0 // @grafana/alerting-backend
 	gopkg.in/mail.v2 v2.3.1 // @grafana/grafana-backend-group
 	gopkg.in/yaml.v3 v3.0.1 // @grafana/alerting-backend
@@ -299,7 +299,7 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
-	github.com/grafana/grafana/pkg/storage/unified/resource v0.0.0-20240620152449-c88de7f4d073 // @grafana/grafana-search-and-storage
+	github.com/grafana/grafana/pkg/storage/unified/resource v0.0.0-20240622112051-c0641a0ca62f // @grafana/grafana-search-and-storage
 	github.com/grafana/regexp v0.0.0-20221123153739-15dc172cd2db // indirect
 	github.com/grafana/sqlds/v3 v3.2.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.1-0.20191002090509-6af20e3a5340 // indirect; @grafana/plugins-platform-backend
