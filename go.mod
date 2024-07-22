@@ -183,12 +183,12 @@ require (
 	gopkg.in/ini.v1 v1.67.0 // @grafana/alerting-backend
 	gopkg.in/mail.v2 v2.3.1 // @grafana/grafana-backend-group
 	gopkg.in/yaml.v3 v3.0.1 // @grafana/alerting-backend
-	k8s.io/api v0.29.3 // @grafana/grafana-app-platform-squad
-	k8s.io/apimachinery v0.29.3 // @grafana/grafana-app-platform-squad
-	k8s.io/apiserver v0.29.2 // @grafana/grafana-app-platform-squad
-	k8s.io/client-go v0.29.3 // @grafana/grafana-app-platform-squad
+	k8s.io/api v0.30.3 // @grafana/grafana-app-platform-squad
+	k8s.io/apimachinery v0.30.3 // @grafana/grafana-app-platform-squad
+	k8s.io/apiserver v0.30.3 // @grafana/grafana-app-platform-squad
+	k8s.io/client-go v0.30.3 // @grafana/grafana-app-platform-squad
 	k8s.io/code-generator v0.29.1 // @grafana/grafana-app-platform-squad
-	k8s.io/component-base v0.29.2 // @grafana/grafana-app-platform-squad
+	k8s.io/component-base v0.30.3 // @grafana/grafana-app-platform-squad
 	k8s.io/klog/v2 v2.120.1 // @grafana/grafana-app-platform-squad
 	k8s.io/kube-aggregator v0.29.0 // @grafana/grafana-app-platform-squad
 	k8s.io/kube-openapi v0.0.0-20240228011516-70dd3763d340 // @grafana/grafana-app-platform-squad
@@ -275,7 +275,6 @@ require (
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect; @grafana/grafana-app-platform-squad
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/analysis v0.22.2 // indirect
 	github.com/go-openapi/errors v0.22.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
@@ -299,7 +298,7 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
-	github.com/grafana/grafana/pkg/storage/unified/resource v0.0.0-20240620152449-c88de7f4d073 // @grafana/grafana-search-and-storage
+	github.com/grafana/grafana/pkg/storage/unified/resource v0.0.0-20240722194702-45f298120e9a // @grafana/grafana-search-and-storage
 	github.com/grafana/regexp v0.0.0-20221123153739-15dc172cd2db // indirect
 	github.com/grafana/sqlds/v3 v3.2.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.1-0.20191002090509-6af20e3a5340 // indirect; @grafana/plugins-platform-backend
@@ -423,14 +422,14 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	k8s.io/kms v0.29.2 // indirect
+	k8s.io/kms v0.30.3 // indirect
 	modernc.org/libc v1.41.0 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.7.2 // indirect
 	modernc.org/sqlite v1.29.6 // indirect
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
-	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.28.0 // indirect
+	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.29.0 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect; @grafana-app-platform-squad
 )
