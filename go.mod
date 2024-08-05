@@ -149,7 +149,7 @@ require (
 	github.com/teris-io/shortid v0.0.0-20171029131806-771a37caa5cf // @grafana/grafana-backend-group
 	github.com/ua-parser/uap-go v0.0.0-20211112212520-00c877edfe0f // @grafana/grafana-backend-group
 	github.com/urfave/cli v1.22.15 // indirect; @grafana/grafana-backend-group
-	github.com/urfave/cli/v2 v2.27.1 // @grafana/grafana-backend-group
+	github.com/urfave/cli/v2 v2.27.3 // @grafana/grafana-backend-group
 	github.com/wk8/go-ordered-map v1.0.0 // @grafana/grafana-backend-group
 	github.com/xlab/treeprint v1.2.0 // @grafana/observability-traces-and-profiling
 	github.com/yudai/gojsondiff v1.0.0 // @grafana/grafana-backend-group
@@ -299,7 +299,7 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
-	github.com/grafana/grafana/pkg/storage/unified/resource v0.0.0-20240620152449-c88de7f4d073 // @grafana/grafana-search-and-storage
+	github.com/grafana/grafana/pkg/storage/unified/resource v0.0.0-20240805175457-b6de9e9d3c40 // @grafana/grafana-search-and-storage
 	github.com/grafana/regexp v0.0.0-20221123153739-15dc172cd2db // indirect
 	github.com/grafana/sqlds/v3 v3.2.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.1-0.20191002090509-6af20e3a5340 // indirect; @grafana/plugins-platform-backend
@@ -396,7 +396,7 @@ require (
 	github.com/unknwon/log v0.0.0-20200308114134-929b1006e34a // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
-	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
+	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
 	github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82 // indirect
 	github.com/yudai/pp v2.0.1+incompatible // indirect
 	github.com/yuin/gopher-lua v1.1.0 // indirect
